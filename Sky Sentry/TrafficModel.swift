@@ -34,6 +34,7 @@ final class TrafficModel {
     private(set) var recorderStats = FlightRecorder.Stats()
 
     let recorder = FlightRecorder()
+    let watchLink = WatchLink()
 
     var config = AlertConfig.default {
         didSet { recompute() }
@@ -136,6 +137,7 @@ final class TrafficModel {
         // tick, for ever, and the retained closures accumulated.
         guard refreshTimer == nil else { return }
 
+        watchLink.start()
         restartSource()
 
         // Keeps stale targets pruned and the picture current even between packets.
@@ -312,6 +314,12 @@ final class TrafficModel {
 
         recorder.record(ownship: ownship, dispositions: dispositions, at: now)
         recorderStats = recorder.stats
+
+        // The wrist gets the same verdict the screen does, including the grey
+        // "no picture" state — silence on the watch must mean the same thing.
+        watchLink.update(solutions: solutions,
+                         overallThreat: overallThreat,
+                         hasPicture: !isSignalLost)
     }
 }
 

@@ -28,23 +28,38 @@ struct ContentView: View {
                 }
             }
         }
-        .onAppear { subscriptions.start() }
+        .onAppear {
+            subscriptions.start()
+            allowSmallWindows()
+        }
         .onDisappear { subscriptions.stop() }
     }
 
     private var trafficDisplay: some View {
         let palette = model.isSignalLost ? Palette.unknown : Palette.of(model.overallThreat)
 
-        return ZStack {
-            palette.background
-                .ignoresSafeArea()
+        return GeometryReader { geometry in
+            // In a small iPadOS window there is only room for the glanceable
+            // layer, which is the part that matters anyway: colour, rings and
+            // arrows. Chrome is dropped rather than shrunk, so what remains
+            // stays readable at arm's length.
+            // Thresholds chosen so a small iPadOS window and a phone in
+            // landscape go compact, but an iPhone SE or mini in portrait
+            // (375pt wide) keeps the full layout.
+            let compact = geometry.size.height < 500 || geometry.size.width < 330
 
-            VStack(spacing: 0) {
-                header(palette)
-                RadarView(solutions: model.solutions, config: model.config, palette: palette)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                footer(palette)
+            ZStack {
+                palette.background
+                    .ignoresSafeArea()
+
+                VStack(spacing: 0) {
+                    header(palette, compact: compact)
+                    RadarView(solutions: model.solutions, config: model.config, palette: palette)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    if !compact { footer(palette) }
+                }
             }
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
         .animation(.easeInOut(duration: 0.2), value: model.overallThreat)
         .onAppear {
@@ -65,10 +80,82 @@ struct ContentView: View {
         .sheet(isPresented: $showingDiagnostics) { DiagnosticsView(model: model) }
     }
 
+    // MARK: - Window sizing
+
+    /// iPadOS sizes a window no smaller than the scene's stated minimum, and the
+    /// default is far larger than this display needs. A traffic alerter wants to
+    /// sit in a corner of the screen, not take a quarter of it, so we ask for a
+    /// much smaller floor.
+    ///
+    /// The system treats this as a preference rather than a guarantee, so the
+    /// result is best-effort.
+    private func allowSmallWindows() {
+        guard UIDevice.current.userInterfaceIdiom == .pad else { return }
+        for scene in UIApplication.shared.connectedScenes {
+            guard let windowScene = scene as? UIWindowScene else { continue }
+            windowScene.sizeRestrictions?.minimumSize = CGSize(width: 180, height: 180)
+        }
+    }
+
     // MARK: - Header
 
     @ViewBuilder
-    private func header(_ palette: Palette) -> some View {
+    private func header(_ palette: Palette, compact: Bool) -> some View {
+        if compact {
+            compactHeader(palette)
+        } else {
+            fullHeader(palette)
+        }
+    }
+
+    /// One line: state on the left, the thing that matters on the right. The
+    /// controls are deliberately absent — widen the window to reach them.
+    private func compactHeader(_ palette: Palette) -> some View {
+        HStack(spacing: 6) {
+            if model.recorderStats.isRecording {
+                Image(systemName: "record.circle")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.red)
+            }
+
+            Text(statusWord)
+                .font(.system(size: 16, weight: .black, design: .rounded))
+                .foregroundStyle(palette.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+
+            Spacer(minLength: 4)
+
+            Text(compactDetail)
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundStyle(palette.ink.opacity(0.9))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+        }
+        // iPadOS draws its window controls over the top-left of the window
+        // content rather than insetting the safe area for them, so the header
+        // has to leave room or the state word sits underneath them.
+        .padding(.leading, UIDevice.current.userInterfaceIdiom == .pad ? 74 : 10)
+        .padding(.trailing, 10)
+        .padding(.top, 2)
+    }
+
+    /// Nearest or converging traffic in the least space that still says something.
+    private var compactDetail: String {
+        if model.receiverFault != nil || model.isStale { return "—" }
+        let subject = model.solutions.first(where: \.isConverging) ?? model.solutions.first
+        guard let subject else { return "CLEAR \(Int(model.config.displayRangeNM)) NM" }
+
+        var text = "\(subject.rangeLabel) NM"
+        if let feet = subject.relativeAltitudeFeet {
+            text += String(format: " %@%d", feet >= 0 ? "+" : "-", abs(feet))
+        }
+        if subject.isConverging { text += " CBDR" }
+        return text
+    }
+
+    @ViewBuilder
+    private func fullHeader(_ palette: Palette) -> some View {
         VStack(spacing: 2) {
             HStack {
                 Text(model.source.rawValue)

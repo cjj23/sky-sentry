@@ -39,9 +39,13 @@ final class TrafficModel {
         didSet { recompute() }
     }
 
-    var source: Source = .simulator {
+    /// Remembered across launches: having to reselect the receiver before every
+    /// flight is exactly the sort of step that gets forgotten.
+    var source: Source = Source(rawValue: UserDefaults.standard.string(forKey: "trafficSource") ?? "")
+        ?? .simulator {
         didSet {
             guard oldValue != source else { return }
+            UserDefaults.standard.set(source.rawValue, forKey: "trafficSource")
             restartSource()
         }
     }
@@ -125,6 +129,13 @@ final class TrafficModel {
     }
 
     func start() {
+        // SwiftUI calls onAppear again whenever the view's identity is rebuilt —
+        // returning from a sheet, or the subscription state resolving. Without
+        // this guard each call added another repeating timer to the run loop
+        // while leaking the previous one, so recompute ran an extra time per
+        // tick, for ever, and the retained closures accumulated.
+        guard refreshTimer == nil else { return }
+
         restartSource()
 
         // Keeps stale targets pruned and the picture current even between packets.
@@ -317,6 +328,7 @@ struct TargetDisposition {
         case noPosition
         case cappedByLimit
 
+        /// Detailed, per-target, for the log line.
         var label: String {
             switch self {
             case .displayed:              return "displayed"
@@ -324,6 +336,19 @@ struct TargetDisposition {
             case .verticalFilter(let ft): return "vertical-filter(\(ft)ft)"
             case .noPosition:             return "no-position"
             case .cappedByLimit:          return "capped-by-limit"
+            }
+        }
+
+        /// Stable key for tallying. `label` embeds the altitude difference, so
+        /// counting by it would mint a new bucket for every distinct value and
+        /// grow without bound over a flight.
+        var category: String {
+            switch self {
+            case .displayed:      return "displayed"
+            case .beyondRange:    return "beyond-range"
+            case .verticalFilter: return "vertical-filter"
+            case .noPosition:     return "no-position"
+            case .cappedByLimit:  return "capped-by-limit"
             }
         }
     }

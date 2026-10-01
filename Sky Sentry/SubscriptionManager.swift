@@ -2,8 +2,12 @@
 //  SubscriptionManager.swift
 //  Eyes Out
 //
-//  StoreKit 2 subscription handling: one monthly auto-renewing product with a
-//  one month introductory free trial.
+//  StoreKit 2 subscription handling: a monthly and an annual auto-renewing
+//  product in the same subscription group, each with a one month free trial.
+//
+//  Annual matters more than it looks in this market. UK general aviation is
+//  seasonal, so a monthly-only plan invites subscribing in April and cancelling
+//  in October; the competition (SafeSky, SkyDemon, PilotAware) all sell yearly.
 //
 //  SAFETY RULE: access is evaluated at launch and then held for the lifetime of
 //  the launch. A subscription that lapses, or a StoreKit call that fails while
@@ -18,8 +22,12 @@ import StoreKit
 @Observable
 final class SubscriptionManager {
 
-    /// Must match the product identifier created in App Store Connect.
-    static let monthlyProductID = "uk.co.chrisjones.eyesout.monthly"
+    /// Must match the product identifiers created in App Store Connect, both in
+    /// the same subscription group so customers can move between them.
+    enum Plan: String, CaseIterable {
+        case monthly = "uk.co.chrisjones.eyesout.monthly"
+        case yearly  = "uk.co.chrisjones.eyesout.yearly"
+    }
 
     enum Access {
         case checking
@@ -28,9 +36,9 @@ final class SubscriptionManager {
     }
 
     private(set) var access: Access = .checking
-    private(set) var product: Product?
+    private(set) var products: [Plan: Product] = [:]
     private(set) var lastError: String?
-    private(set) var isPurchasing = false
+    private(set) var purchasingPlan: Plan?
     /// True when access was granted because entitlement could not be checked at
     /// all, rather than because a valid subscription was found.
     private(set) var isUnverified = false
@@ -43,6 +51,11 @@ final class SubscriptionManager {
     // MARK: - Lifecycle
 
     func start() {
+        // A repeated onAppear would otherwise replace this task without
+        // cancelling it, leaving the old one iterating Transaction.updates for
+        // the life of the process.
+        guard updatesTask == nil else { return }
+
         // Listen for transactions that arrive outside a purchase we initiated,
         // such as a renewal or a purchase made on another device.
         updatesTask = Task { [weak self] in
@@ -55,6 +68,18 @@ final class SubscriptionManager {
             }
         }
         Task { await refresh() }
+
+        // Watchdog. StoreKit can hang indefinitely when the App Store is
+        // unreachable — which is the normal state in the air — and the fail-open
+        // in refresh() only helps once the await returns. Without this the app
+        // sits on a spinner for ever and never shows any traffic at all.
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard let self, self.access == .checking else { return }
+            self.isUnverified = true
+            self.grantedThisLaunch = true
+            self.access = .entitled
+        }
     }
 
     func stop() {
@@ -65,18 +90,22 @@ final class SubscriptionManager {
     // MARK: - Entitlement
 
     func refresh() async {
-        if product == nil {
+        if products.isEmpty {
             do {
-                product = try await Product.products(for: [Self.monthlyProductID]).first
+                let loaded = try await Product.products(for: Plan.allCases.map(\.rawValue))
+                products = Dictionary(uniqueKeysWithValues: loaded.compactMap { product in
+                    Plan(rawValue: product.id).map { ($0, product) }
+                })
             } catch {
                 lastError = error.localizedDescription
             }
         }
 
+        let identifiers = Set(Plan.allCases.map(\.rawValue))
         var entitled = false
         for await result in Transaction.currentEntitlements {
             if case .verified(let transaction) = result,
-               transaction.productID == Self.monthlyProductID,
+               identifiers.contains(transaction.productID),
                transaction.revocationDate == nil {
                 entitled = true
             }
@@ -87,9 +116,9 @@ final class SubscriptionManager {
         if entitled || grantedThisLaunch {
             // Once granted, stay granted for this launch — see the safety rule above.
             access = .entitled
-        } else if product == nil {
-            // We could not even find out what is for sale: either the product is
-            // not configured in App Store Connect yet, or the App Store is
+        } else if products.isEmpty {
+            // We could not even find out what is for sale: either the products
+            // are not configured in App Store Connect yet, or the App Store is
             // unreachable — which is the normal state airborne. Fail open. A
             // billing system that cannot reach a server must never be the reason
             // a pilot loses their traffic display.
@@ -102,11 +131,11 @@ final class SubscriptionManager {
 
     // MARK: - Purchasing
 
-    func purchase() async {
-        guard let product, !isPurchasing else { return }
-        isPurchasing = true
+    func purchase(_ plan: Plan) async {
+        guard let product = products[plan], purchasingPlan == nil else { return }
+        purchasingPlan = plan
         lastError = nil
-        defer { isPurchasing = false }
+        defer { purchasingPlan = nil }
 
         do {
             switch try await product.purchase() {
@@ -144,16 +173,16 @@ final class SubscriptionManager {
 
     // MARK: - Display helpers
 
-    /// "£4.99 / month", taken from StoreKit so it is correct in every storefront.
-    var priceDescription: String? {
-        guard let product else { return nil }
-        return "\(product.displayPrice) / month"
+    /// Localised price straight from StoreKit, so it is right in every storefront.
+    func price(for plan: Plan) -> String? {
+        products[plan]?.displayPrice
     }
 
-    /// Describes the introductory offer if the account is eligible for one.
-    var trialDescription: String? {
-        guard let offer = product?.subscription?.introductoryOffer,
+    /// Describes the introductory offer, if this account is eligible for one.
+    func trialDescription(for plan: Plan) -> String? {
+        guard let offer = products[plan]?.subscription?.introductoryOffer,
               offer.paymentMode == .freeTrial else { return nil }
+
         let count = offer.period.value
         let unit: String
         switch offer.period.unit {
@@ -163,6 +192,17 @@ final class SubscriptionManager {
         case .year:  unit = count == 1 ? "year" : "years"
         @unknown default: unit = "period"
         }
-        return "\(count) \(unit) free, then"
+        return "\(count) \(unit) free"
+    }
+
+    /// How much the annual plan saves against twelve months of the monthly one,
+    /// as a percentage, computed from live prices rather than hard-coded.
+    var annualSavingPercent: Int? {
+        guard let monthly = products[.monthly]?.price,
+              let yearly = products[.yearly]?.price else { return nil }
+        let twelveMonths = monthly * 12
+        guard twelveMonths > 0, yearly < twelveMonths else { return nil }
+        let saving = (twelveMonths - yearly) / twelveMonths * 100
+        return Int(NSDecimalNumber(decimal: saving).doubleValue.rounded())
     }
 }

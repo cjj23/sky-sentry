@@ -176,7 +176,7 @@ final class FlightRecorder {
 
         for disposition in dispositions {
             seenAddresses.insert(disposition.target.icaoAddress)
-            _stats.outcomeCounts[disposition.outcome.label, default: 0] += 1
+            _stats.outcomeCounts[disposition.outcome.category, default: 0] += 1
         }
         _stats.uniqueTargets = seenAddresses.count
         _stats.samples += 1

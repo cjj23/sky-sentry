@@ -64,6 +64,35 @@ enum AppInfo {
         "CBDR means constant bearing, decreasing range: the aircraft is on a collision course and will not appear to move in your windscreen.",
     ]
 
+    // MARK: - iPad windowing
+    //
+    // Worth spelling out in the app: iPadOS 26 folded Split View and Slide Over
+    // into the windowing system, so a pilot left in Full Screen Apps mode simply
+    // cannot put two apps on screen and will reasonably conclude this app is
+    // broken rather than that a system setting needs changing.
+
+    static let iPadWindowingSteps = [
+        "Open Settings › Multitasking & Gestures and choose Windowed Apps.",
+        "Open your navigation app and leave it full screen.",
+        "Open \(displayName), then drag inward from any corner to shrink it into a window.",
+        "Drag it to a corner clear of your map controls. It stays where you put it.",
+    ]
+
+    static let iPadWindowingNote = """
+    In Full Screen Apps mode iPadOS shows one app at a time and nothing else: \
+    Split View and Slide Over no longer exist separately, having been folded \
+    into the windowing system. Windowed Apps or Stage Manager is therefore \
+    required to see \(displayName) and your navigation app together.
+
+    Turning it on changes nothing else. Apps still open full screen; you only \
+    see a difference when you deliberately shrink one.
+    """
+
+    static let iPadWindowingFooter = """
+    In a small window the controls are hidden to leave room for the display. \
+    Widen the window to change the traffic source or reach diagnostics.
+    """
+
     static let relationshipToOtherApps = """
     \(displayName) is a supplement to your navigation software, not a \
     substitute for it. It does not show maps, airspace, terrain, NOTAMs or \

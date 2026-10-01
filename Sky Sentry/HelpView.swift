@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct HelpView: View {
     @Environment(\.dismiss) private var dismiss
@@ -18,6 +19,7 @@ struct HelpView: View {
                 cannotSeeSection
                 readingDisplaySection
                 alongsideSection
+                iPadWindowingSection
                 setupSection
                 aboutSection
             }
@@ -84,11 +86,33 @@ struct HelpView: View {
         }
     }
 
+    /// iPad only: how to get a window at all. Hidden on iPhone, where none of
+    /// it applies.
+    @ViewBuilder
+    private var iPadWindowingSection: some View {
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            Section {
+                Text(AppInfo.iPadWindowingNote).font(.callout)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(Array(AppInfo.iPadWindowingSteps.enumerated()), id: \.offset) { index, step in
+                        stepRow(index + 1, step)
+                    }
+                }
+                .padding(.vertical, 2)
+            } header: {
+                Text("Showing it beside your navigation app")
+            } footer: {
+                Text(AppInfo.iPadWindowingFooter)
+            }
+        }
+    }
+
     private var setupSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
                 stepRow(1, "Power on your SkyEcho 2 and let it get a GPS fix.")
-                stepRow(2, "On the iPhone, join the SkyEcho's Wi-Fi network in Settings.")
+                stepRow(2, "On your device, join the SkyEcho's Wi-Fi network in Settings.")
                 stepRow(3, "Open \(AppInfo.displayName) and select SkyEcho as the source.")
                 stepRow(4, "Check the header shows traffic counts rather than NO DATA.")
             }

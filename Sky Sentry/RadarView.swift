@@ -62,9 +62,13 @@ struct RadarView: View {
     let config: AlertConfig
     let palette: Palette
 
-    private let headLength: CGFloat = 30
-    private let headWidth: CGFloat = 26
-    private let shaftWidth: CGFloat = 12
+    // Nominal sizes, tuned against a full-width phone screen (radius ~185pt).
+    // In a small iPadOS window everything is scaled down together by `scale`,
+    // so arrows stay proportionate rather than swamping a small ring.
+    private let nominalHeadLength: CGFloat = 30
+    private let nominalHeadWidth: CGFloat = 26
+    private let nominalShaftWidth: CGFloat = 12
+    private let nominalRadius: CGFloat = 185
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
@@ -79,22 +83,48 @@ struct RadarView: View {
         let centre = CGPoint(x: size.width / 2, y: size.height / 2)
         // Leave room for the arrowheads to sit proud at the rim.
         let maxRadius = min(size.width, size.height) / 2 - 12
-        guard maxRadius > 40 else { return }
+        // Below this there is not enough room for the picture to mean anything.
+        guard maxRadius > 26 else { return }
 
-        drawRings(&context, centre: centre, maxRadius: maxRadius)
-        drawBearingTicks(&context, centre: centre, maxRadius: maxRadius)
-        drawOwnship(&context, centre: centre)
+        let scale = min(1.0, max(0.45, maxRadius / nominalRadius))
+
+        drawRings(&context, centre: centre, maxRadius: maxRadius, scale: scale)
+        drawBearingTicks(&context, centre: centre, maxRadius: maxRadius, scale: scale)
+        drawOwnship(&context, centre: centre, scale: scale)
+
+        // In a small window there is no room for a label on every target, and
+        // crowding them defeats the point of a glanceable display. Label only
+        // the one that matters — converging first, otherwise nearest — and let
+        // the arrows themselves carry the rest.
+        // Graded by the actual radius rather than the scale factor: below about
+        // 120pt there is no room for legible text at all, and the header is
+        // already carrying the headline figure.
+        let labelBudget: Int
+        if maxRadius < 120 {
+            labelBudget = 0
+        } else if maxRadius < 175 {
+            labelBudget = 1
+        } else {
+            labelBudget = solutions.count
+        }
+        let priority = solutions.sorted {
+            $0.isConverging != $1.isConverging ? $0.isConverging : $0.rangeNM < $1.rangeNM
+        }
+        let labelled = Set(priority.prefix(labelBudget).map(\.target.icaoAddress))
 
         // Furthest first, so the closest (most urgent) mark is drawn on top.
         var placedLabels: [CGPoint] = []
         for solution in solutions.sorted(by: { $0.rangeNM > $1.rangeNM }) {
             if solution.relativeBearing == nil {
                 drawBearinglessRing(&context, solution: solution, centre: centre,
-                                    maxRadius: maxRadius, time: time,
+                                    maxRadius: maxRadius, time: time, scale: scale,
+                                    mayLabel: labelled.contains(solution.target.icaoAddress),
                                     placedLabels: &placedLabels)
             } else {
                 drawArrow(&context, solution: solution, centre: centre,
-                          maxRadius: maxRadius, time: time, placedLabels: &placedLabels)
+                          maxRadius: maxRadius, time: time, scale: scale,
+                          mayLabel: labelled.contains(solution.target.icaoAddress),
+                          placedLabels: &placedLabels)
             }
         }
     }
@@ -108,8 +138,9 @@ struct RadarView: View {
     /// arrow would invent a direction we do not have.
     private func drawBearinglessRing(_ context: inout GraphicsContext, solution: TrafficSolution,
                                      centre: CGPoint, maxRadius: CGFloat, time: TimeInterval,
+                                     scale: CGFloat, mayLabel: Bool,
                                      placedLabels: inout [CGPoint]) {
-        let radius = max(14, maxRadius * CGFloat(solution.rangeNM / config.displayRangeNM))
+        let radius = max(14 * scale, maxRadius * CGFloat(solution.rangeNM / config.displayRangeNM))
         let rect = CGRect(x: centre.x - radius, y: centre.y - radius,
                           width: radius * 2, height: radius * 2)
         let path = Path(ellipseIn: rect)
@@ -119,28 +150,33 @@ struct RadarView: View {
         let pulse = 0.30 + 0.70 * (0.5 + 0.5 * sin(time * 2 * .pi * rate))
 
         context.stroke(path, with: .color(palette.inkOutline.opacity(pulse * 0.9)),
-                       style: StrokeStyle(lineWidth: 11, lineCap: .round))
+                       style: StrokeStyle(lineWidth: 11 * scale, lineCap: .round))
         context.stroke(path, with: .color(palette.ink.opacity(pulse)),
-                       style: StrokeStyle(lineWidth: 6, lineCap: .round, dash: [18, 10]))
+                       style: StrokeStyle(lineWidth: 6 * scale, lineCap: .round,
+                                          dash: [18 * scale, 10 * scale]))
+
+        guard mayLabel else { return }
 
         // Label it at the top of its ring, nudged clear of anything already placed.
+        let offset = 20 * scale
         let candidates: [CGPoint] = [
-            CGPoint(x: centre.x, y: centre.y - radius - 20),
-            CGPoint(x: centre.x, y: centre.y + radius + 20),
-            CGPoint(x: centre.x + radius + 26, y: centre.y),
-            CGPoint(x: centre.x - radius - 26, y: centre.y),
+            CGPoint(x: centre.x, y: centre.y - radius - offset),
+            CGPoint(x: centre.x, y: centre.y + radius + offset),
+            CGPoint(x: centre.x + radius + offset * 1.3, y: centre.y),
+            CGPoint(x: centre.x - radius - offset * 1.3, y: centre.y),
         ]
         let anchor = candidates.first { candidate in
-            placedLabels.allSatisfy { hypot($0.x - candidate.x, $0.y - candidate.y) > 52 }
+            placedLabels.allSatisfy { hypot($0.x - candidate.x, $0.y - candidate.y) > 52 * scale }
         } ?? candidates[0]
 
         placedLabels.append(anchor)
-        drawLabel(&context, solution: solution, at: anchor)
+        drawLabel(&context, solution: solution, at: anchor, scale: scale)
     }
 
     // MARK: Rings
 
-    private func drawRings(_ context: inout GraphicsContext, centre: CGPoint, maxRadius: CGFloat) {
+    private func drawRings(_ context: inout GraphicsContext, centre: CGPoint,
+                           maxRadius: CGFloat, scale: CGFloat) {
         let rings: [(range: Double, dashed: Bool)] = [
             (config.warningRangeNM, true),
             (config.cautionRangeNM, true),
@@ -151,56 +187,64 @@ struct RadarView: View {
             let radius = maxRadius * CGFloat(ring.range / config.displayRangeNM)
             let rect = CGRect(x: centre.x - radius, y: centre.y - radius,
                               width: radius * 2, height: radius * 2)
-            let style = StrokeStyle(lineWidth: ring.dashed ? 2.5 : 2,
-                                    dash: ring.dashed ? [9, 7] : [])
+            let style = StrokeStyle(lineWidth: (ring.dashed ? 2.5 : 2) * scale,
+                                    dash: ring.dashed ? [9 * scale, 7 * scale] : [])
             context.stroke(Path(ellipseIn: rect), with: .color(palette.ring), style: style)
 
             // Range label sits just below the ring on the vertical, clear of most arrows.
             let label = context.resolve(
                 Text("\(Int(ring.range))")
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(.system(size: 12 * scale, weight: .semibold, design: .rounded))
                     .foregroundStyle(palette.ring)
             )
-            context.draw(label, at: CGPoint(x: centre.x, y: centre.y + radius - 10), anchor: .center)
+            context.draw(label, at: CGPoint(x: centre.x, y: centre.y + radius - 10 * scale),
+                         anchor: .center)
         }
     }
 
     /// Ticks every 30 degrees to help judge direction; longer ones at the quadrants.
-    private func drawBearingTicks(_ context: inout GraphicsContext, centre: CGPoint, maxRadius: CGFloat) {
+    private func drawBearingTicks(_ context: inout GraphicsContext, centre: CGPoint,
+                                  maxRadius: CGFloat, scale: CGFloat) {
         for degrees in stride(from: 0, to: 360, by: 30) {
             let isQuadrant = degrees % 90 == 0
             let angle = Double(degrees) * .pi / 180
             let ux = CGFloat(sin(angle)), uy = CGFloat(-cos(angle))
-            let inner = maxRadius - (isQuadrant ? 16 : 9)
+            let inner = maxRadius - (isQuadrant ? 16 : 9) * scale
 
             var path = Path()
             path.move(to: CGPoint(x: centre.x + ux * inner, y: centre.y + uy * inner))
             path.addLine(to: CGPoint(x: centre.x + ux * maxRadius, y: centre.y + uy * maxRadius))
             context.stroke(path, with: .color(palette.ring),
-                           style: StrokeStyle(lineWidth: isQuadrant ? 3 : 1.5, lineCap: .round))
+                           style: StrokeStyle(lineWidth: (isQuadrant ? 3 : 1.5) * scale,
+                                              lineCap: .round))
         }
     }
 
     /// Ownship sits at the centre pointing up: the display is track-up, so
     /// straight up the screen is always where the nose is pointing.
-    private func drawOwnship(_ context: inout GraphicsContext, centre: CGPoint) {
+    private func drawOwnship(_ context: inout GraphicsContext, centre: CGPoint, scale: CGFloat) {
         var path = Path()
-        path.move(to: CGPoint(x: centre.x, y: centre.y - 13))
-        path.addLine(to: CGPoint(x: centre.x + 9, y: centre.y + 10))
-        path.addLine(to: CGPoint(x: centre.x, y: centre.y + 5))
-        path.addLine(to: CGPoint(x: centre.x - 9, y: centre.y + 10))
+        path.move(to: CGPoint(x: centre.x, y: centre.y - 13 * scale))
+        path.addLine(to: CGPoint(x: centre.x + 9 * scale, y: centre.y + 10 * scale))
+        path.addLine(to: CGPoint(x: centre.x, y: centre.y + 5 * scale))
+        path.addLine(to: CGPoint(x: centre.x - 9 * scale, y: centre.y + 10 * scale))
         path.closeSubpath()
 
         context.fill(path, with: .color(palette.ink))
-        context.stroke(path, with: .color(palette.inkOutline), lineWidth: 1.5)
+        context.stroke(path, with: .color(palette.inkOutline), lineWidth: 1.5 * scale)
     }
 
     // MARK: Arrows
 
     private func drawArrow(_ context: inout GraphicsContext, solution: TrafficSolution,
                            centre: CGPoint, maxRadius: CGFloat, time: TimeInterval,
+                           scale: CGFloat, mayLabel: Bool,
                            placedLabels: inout [CGPoint]) {
         guard let relativeBearing = solution.relativeBearing else { return }
+
+        let headLength = nominalHeadLength * scale
+        let headWidth = nominalHeadWidth * scale
+        let shaftWidth = nominalShaftWidth * scale
         let angle = relativeBearing * .pi / 180
         let ux = CGFloat(sin(angle)), uy = CGFloat(-cos(angle))   // outward, along the bearing
         let px = CGFloat(cos(angle)), py = CGFloat(sin(angle))    // across it
@@ -235,7 +279,7 @@ struct RadarView: View {
         if solution.isConverging {
             let pulse = 0.35 + 0.55 * (0.5 + 0.5 * sin(time * 2 * .pi * 1.4))
             context.stroke(path, with: .color(palette.flashAlternate.opacity(pulse)),
-                           style: StrokeStyle(lineWidth: 11, lineJoin: .round))
+                           style: StrokeStyle(lineWidth: 11 * scale, lineJoin: .round))
         }
 
         // 2 Hz square wave: the standard attention-getting flash rate.
@@ -245,28 +289,29 @@ struct RadarView: View {
 
         context.fill(path, with: .color(fill))
         context.stroke(path, with: .color(palette.inkOutline),
-                       style: StrokeStyle(lineWidth: 2, lineJoin: .round))
+                       style: StrokeStyle(lineWidth: 2 * scale, lineJoin: .round))
 
         // Only label the ones that matter, to keep a busy circuit readable.
-        guard solution.threat >= .caution || solution.isConverging else { return }
+        guard mayLabel, solution.threat >= .caution || solution.isConverging else { return }
 
         // Offset across the arrow rather than along it, so labels stay clear of
         // the range-ring numbers that sit on the vertical. Two aircraft on a
         // similar bearing would otherwise print on top of each other, so try a
         // few positions and take the first that is clear of what is already drawn.
-        let labelRadius = max(tailRadius - 12, 34)
-        let offsets: [CGFloat] = [shaftWidth + 20, -(shaftWidth + 20),
-                                  shaftWidth + 62, -(shaftWidth + 62)]
+        let labelRadius = max(tailRadius - 12 * scale, 34 * scale)
+        let offsets: [CGFloat] = [shaftWidth + 20 * scale, -(shaftWidth + 20 * scale),
+                                  shaftWidth + 62 * scale, -(shaftWidth + 62 * scale)]
         let candidates = offsets.map { point(labelRadius, across: $0) }
         let anchor = candidates.first { candidate in
-            placedLabels.allSatisfy { hypot($0.x - candidate.x, $0.y - candidate.y) > 52 }
+            placedLabels.allSatisfy { hypot($0.x - candidate.x, $0.y - candidate.y) > 52 * scale }
         } ?? candidates[0]
 
         placedLabels.append(anchor)
-        drawLabel(&context, solution: solution, at: anchor)
+        drawLabel(&context, solution: solution, at: anchor, scale: scale)
     }
 
-    private func drawLabel(_ context: inout GraphicsContext, solution: TrafficSolution, at point: CGPoint) {
+    private func drawLabel(_ context: inout GraphicsContext, solution: TrafficSolution,
+                           at point: CGPoint, scale: CGFloat) {
         var lines = [solution.rangeLabel]
         if let altitude = solution.altitudeLabel {
             lines.append(altitude)
@@ -281,10 +326,13 @@ struct RadarView: View {
 
         // Each line is drawn separately: Canvas can only resolve a Text, and the
         // layout modifiers that would centre a multi-line string return a View.
+        // Labels shrink more slowly than the geometry: below about 11pt they
+        // stop being readable at a glance, which defeats the point.
+        let fontSize = max(11, 13 * scale)
         for (index, line) in lines.enumerated() {
             let text = Text(line)
-                .font(.system(size: 13, weight: .heavy, design: .rounded))
-            let origin = CGPoint(x: point.x, y: point.y + CGFloat(index) * 14)
+                .font(.system(size: fontSize, weight: .heavy, design: .rounded))
+            let origin = CGPoint(x: point.x, y: point.y + CGFloat(index) * (fontSize + 1))
 
             // Outline colour offset behind, so the figures stay readable wherever they land.
             let shadow = context.resolve(text.foregroundStyle(palette.inkOutline))

@@ -60,6 +60,53 @@ struct PaywallView: View {
         }
     }
 
+    @ViewBuilder
+    private func planButton(_ plan: SubscriptionManager.Plan, prominent: Bool) -> some View {
+        let isBusy = subscriptions.purchasingPlan == plan
+        let price = subscriptions.price(for: plan)
+        let trial = subscriptions.trialDescription(for: plan)
+
+        let action: () -> Void = { Task { await subscriptions.purchase(plan) } }
+        let label = VStack(spacing: 2) {
+            if isBusy {
+                ProgressView().tint(prominent ? .white : .accentColor)
+            } else {
+                HStack(spacing: 6) {
+                    Text(plan == .yearly ? "Yearly" : "Monthly").font(.headline)
+                    if let price {
+                        Text("· \(price)").font(.headline)
+                    }
+                }
+                if let subtitle = planSubtitle(plan, trial: trial) {
+                    Text(subtitle).font(.caption)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+
+        // The two button styles are different types, so the branch has to wrap
+        // the whole button rather than just the style modifier.
+        if prominent {
+            Button(action: action) { label }
+                .buttonStyle(.borderedProminent)
+                .disabled(price == nil || subscriptions.purchasingPlan != nil)
+        } else {
+            Button(action: action) { label }
+                .buttonStyle(.bordered)
+                .disabled(price == nil || subscriptions.purchasingPlan != nil)
+        }
+    }
+
+    private func planSubtitle(_ plan: SubscriptionManager.Plan, trial: String?) -> String? {
+        var parts: [String] = []
+        if let trial { parts.append("\(trial) first") }
+        if plan == .yearly, let saving = subscriptions.annualSavingPercent {
+            parts.append("save \(saving)%")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
     private var warningCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label("Before you subscribe", systemImage: "exclamationmark.triangle.fill")
@@ -88,25 +135,10 @@ struct PaywallView: View {
                     .multilineTextAlignment(.center)
             }
 
-            Button {
-                Task { await subscriptions.purchase() }
-            } label: {
-                VStack(spacing: 2) {
-                    if subscriptions.isPurchasing {
-                        ProgressView().tint(.white)
-                    } else {
-                        Text(subscriptions.trialDescription ?? "Subscribe")
-                            .font(.headline)
-                        if let price = subscriptions.priceDescription {
-                            Text(price).font(.subheadline)
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(subscriptions.product == nil || subscriptions.isPurchasing)
+            // Annual first and prominent: it is the better deal for the customer
+            // and it survives the winter, when UK flying largely stops.
+            planButton(.yearly, prominent: true)
+            planButton(.monthly, prominent: false)
 
             Button("Restore purchases") {
                 Task { await subscriptions.restore() }

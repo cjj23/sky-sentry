@@ -95,14 +95,16 @@ final class TrafficModel {
         receiver.onRawData = { [weak self] data in
             self?.recorder.recordRaw(data)
         }
-        simulator.onRangeOnlyTarget = { [weak self] address, callsign, range, altitude in
-            self?.ingestRangeOnly(address: address, callsign: callsign,
-                                  rangeNM: range, altitudeFeet: altitude)
-        }
     }
 
-    /// Entry point for sources that measure distance but not direction. The
-    /// display shows these as a pulsing ring rather than an arrow.
+    /// Entry point for sources that measure distance but not direction — a Mode S
+    /// interrogation, or a FLARM contact reported without a bearing. The display
+    /// shows these as a pulsing ring rather than an arrow, since drawing an arrow
+    /// would invent a direction we do not have.
+    ///
+    /// Nothing calls this yet: the SkyEcho's GDL90 cannot express a bearingless
+    /// contact, and the test feed deliberately produces none. It is the hook for
+    /// a PilotAware or PowerFLARM source.
     func ingestRangeOnly(address: UInt32, callsign: String,
                          rangeNM: Double, altitudeFeet: Int?) {
         lastPacket = Date()

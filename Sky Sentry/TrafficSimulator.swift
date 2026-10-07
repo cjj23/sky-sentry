@@ -16,17 +16,12 @@ import Foundation
 final class TrafficSimulator {
 
     /// Receives fully framed GDL90 datagrams, as if they had arrived over WiFi.
-    var onPacket: ((Data) -> Void)?
-
-    /// Range-only contact: address, label, range in nm, pressure altitude.
     ///
-    /// GDL90 has no way to express a target without a position, so this cannot
-    /// go through the packet path. It models what a Mode S interrogation or a
-    /// bearingless FLARM contact would deliver, and exercises the ring display.
-    var onRangeOnlyTarget: ((UInt32, String, Double, Int?) -> Void)?
-
-    /// Closes slowly from 8 nm so the ring visibly shrinks during a test.
-    private var modeSRangeNM: Double = 8.0
+    /// Everything the test feed produces has a position, and therefore a
+    /// bearing. Bearingless contacts — Mode S, or FLARM without a bearing —
+    /// cannot be expressed in GDL90 anyway, and are delivered by real sources
+    /// through `TrafficModel.ingestRangeOnly` instead.
+    var onPacket: ((Data) -> Void)?
 
     private var timer: Timer?
     private var elapsed: TimeInterval = 0
@@ -170,11 +165,6 @@ final class TrafficSimulator {
                                       callsign: script.callsign)
             onPacket?(GDL90.encodeReport(id: .trafficReport, report: report))
         }
-
-        if interval > 0 {
-            modeSRangeNM = max(0.4, modeSRangeNM - 0.05)
-        }
-        onRangeOnlyTarget?(0x40FFEE, "MODES", modeSRangeNM, ownAltitude - 300)
     }
 
     private func advance(interval: TimeInterval) {

@@ -8,6 +8,7 @@
 //
 
 import Foundation
+import CoreLocation
 import Observation
 
 @MainActor
@@ -35,6 +36,7 @@ final class TrafficModel {
 
     let recorder = FlightRecorder()
     let watchLink = WatchLink()
+    let location = LocationProvider()
 
     var config = AlertConfig.default {
         didSet { recompute() }
@@ -138,6 +140,7 @@ final class TrafficModel {
         guard refreshTimer == nil else { return }
 
         watchLink.start()
+        location.start()
         restartSource()
 
         // Keeps stale targets pruned and the picture current even between packets.
@@ -152,6 +155,7 @@ final class TrafficModel {
     func stop() {
         refreshTimer?.invalidate()
         refreshTimer = nil
+        location.stop()
         receiver.stop()
         simulator.stop()
     }
@@ -215,12 +219,35 @@ final class TrafficModel {
 
     // MARK: - Relative picture
 
+    /// Ownship derived from the phone's GPS, used only while the receiver has
+    /// not supplied one. Course is only meaningful when actually moving, so a
+    /// stationary fix gives track 0 and the display is effectively north-up
+    /// until the aircraft starts rolling.
+    private func fallbackOwnship() -> Ownship? {
+        guard location.hasUsableFix, let fix = location.latest else { return nil }
+        return Ownship(latitude: fix.coordinate.latitude,
+                       longitude: fix.coordinate.longitude,
+                       // Geometric altitude, not pressure: relative-altitude
+                       // comparisons against targets will be approximate until
+                       // the receiver supplies its own pressure altitude.
+                       pressureAltitudeFeet: fix.verticalAccuracy > 0
+                           ? Int(fix.altitude * 3.280_84) : nil,
+                       geometricAltitudeFeet: fix.verticalAccuracy > 0
+                           ? Int(fix.altitude * 3.280_84) : nil,
+                       trackDegrees: fix.course >= 0 ? fix.course : 0,
+                       groundSpeedKnots: fix.speed >= 0 ? fix.speed * 1.943_84 : 0,
+                       lastUpdate: fix.timestamp)
+    }
+
     private func recompute() {
         let now = Date()
         targets = targets.filter { now.timeIntervalSince($0.value.lastUpdate) < config.targetStaleAfter }
         bearingTracks = bearingTracks.filter { targets[$0.key] != nil }
 
-        guard let ownship else {
+        // Without an ownship position there is no relative picture at all, and
+        // traffic is received only to be discarded. If the receiver has not got
+        // a fix yet, stand in with the phone's own.
+        guard let ownship = ownship ?? fallbackOwnship() else {
             solutions = []
             overallThreat = .clear
             filteredCount = 0

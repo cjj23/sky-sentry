@@ -22,6 +22,8 @@ final class WatchTrafficModel: NSObject {
         didSet { if !hapticsEnabled { alerter.stop() } }
     }
 
+    let monitoring = MonitoringSession()
+
     private let alerter = HapticAlerter()
 
     /// The phone sends about once a second; treat silence as loss of picture
@@ -36,11 +38,24 @@ final class WatchTrafficModel: NSObject {
     }
 
     func start() {
+        monitoring.onExpiryWarning = { [weak self] in
+            self?.alerter.playExpiryWarning()
+        }
+
         guard WCSession.isSupported() else { return }
         let session = WCSession.default
         session.delegate = self
         session.activate()
         alerter.start()
+    }
+
+    func toggleMonitoring() {
+        if monitoring.isArmed {
+            monitoring.disarm()
+            alerter.stop()
+        } else {
+            monitoring.arm()
+        }
     }
 
     private func apply(_ incoming: TrafficSummary) {

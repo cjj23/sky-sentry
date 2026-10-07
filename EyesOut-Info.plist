@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The phone holds the SkyEcho's Wi-Fi link and does all the decoding. iOS
+	     suspends a backgrounded app and stops delivering UDP, so without this
+	     the traffic picture dies the moment the pilot switches to their map.
+	     The app genuinely uses location: it falls back to phone GPS for ownship
+	     when the receiver has no fix. -->
+	<!-- Exposes Documents/Recordings in the Files app so flight recordings can be
+	     retrieved without the in-app share sheet. Set here rather than via
+	     INFOPLIST_KEY_UIFileSharingEnabled, which Xcode silently drops. -->
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
+</dict>
+</plist>

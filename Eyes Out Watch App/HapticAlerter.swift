@@ -110,6 +110,21 @@ final class HapticAlerter {
         }
     }
 
+    /// Played when the monitoring session is about to end. Deliberately unlike
+    /// any traffic pattern — three slow heavy thumps — so it reads as "the watch
+    /// is about to stop telling you things", not as an aircraft.
+    func playExpiryWarning() {
+        let device = WKInterfaceDevice.current()
+        Task { @MainActor in
+            for index in 0..<3 {
+                if index > 0 {
+                    try? await Task.sleep(nanoseconds: 450_000_000)
+                }
+                device.play(.failure)
+            }
+        }
+    }
+
     // MARK: - Cadence
 
     /// Maps range to a pulse interval, geometrically so the rate climbs sharply

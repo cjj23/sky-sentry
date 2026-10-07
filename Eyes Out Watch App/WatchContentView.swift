@@ -15,36 +15,80 @@ struct WatchContentView: View {
     var body: some View {
         let summary = model.displaySummary
 
-        ZStack {
-            background(for: summary).ignoresSafeArea()
-
-            VStack(spacing: 6) {
-                Text(headline(for: summary))
-                    .font(.system(size: 20, weight: .black, design: .rounded))
-                    .minimumScaleFactor(0.5)
-                    .lineLimit(1)
-
-                if summary.isAlerting {
-                    Text(summary.side == .left ? "◀ LEFT"
-                         : summary.side == .right ? "RIGHT ▶" : "DIRECTION UNKNOWN")
-                        .font(.system(size: 15, weight: .heavy, design: .rounded))
-
-                    Text(detail(for: summary))
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
-                        .opacity(0.9)
-                } else {
-                    Text(subtitle(for: summary))
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .multilineTextAlignment(.center)
-                        .opacity(0.85)
-                }
-
+        ScrollView {
+            VStack(spacing: 8) {
+                statusBlock(summary)
+                armingBlock
                 Toggle("Haptics", isOn: $model.hapticsEnabled)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .padding(.top, 2)
             }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 6)
+        }
+        .background(background(for: summary).ignoresSafeArea())
+        .foregroundStyle(.white)
+    }
+
+    // MARK: - Traffic
+
+    @ViewBuilder
+    private func statusBlock(_ summary: TrafficSummary) -> some View {
+        VStack(spacing: 4) {
+            Text(headline(for: summary))
+                .font(.system(size: 20, weight: .black, design: .rounded))
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
+
+            if summary.isAlerting {
+                Text(summary.side == .left ? "◀ LEFT"
+                     : summary.side == .right ? "RIGHT ▶" : "DIRECTION UNKNOWN")
+                    .font(.system(size: 15, weight: .heavy, design: .rounded))
+
+                Text(detail(for: summary))
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .opacity(0.9)
+            } else {
+                Text(subtitle(for: summary))
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .multilineTextAlignment(.center)
+                    .opacity(0.85)
+            }
+        }
+        .padding(.top, 2)
+    }
+
+    // MARK: - Arming
+
+    @ViewBuilder
+    private var armingBlock: some View {
+        VStack(spacing: 4) {
+            Button {
+                model.toggleMonitoring()
+            } label: {
+                Label(model.monitoring.isArmed ? "Stop monitoring" : "Start monitoring",
+                      systemImage: model.monitoring.isArmed ? "stop.circle.fill" : "bolt.horizontal.circle")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .frame(maxWidth: .infinity)
+            }
+            .tint(model.monitoring.isArmed ? .red : .accentColor)
+
+            // The limitation stated plainly rather than hidden: without this the
+            // watch stops alerting the moment the screen goes off.
+            Text(armingFootnote)
+                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .multilineTextAlignment(.center)
+                .opacity(0.8)
+        }
+    }
+
+    private var armingFootnote: String {
+        switch model.monitoring.state {
+        case .idle:
+            if let reason = model.monitoring.lastEndReason { return reason }
+            return "Arm before flight — haptics stop when the screen sleeps otherwise."
+        case .running:
+            return "Monitoring — haptics continue with your wrist down."
+        case .expiring:
+            return "Session ending — tap to re-arm."
         }
     }
 

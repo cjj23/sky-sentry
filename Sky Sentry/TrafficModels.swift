@@ -10,21 +10,32 @@ import Foundation
 
 // MARK: - Alert configuration
 
-/// Tunable thresholds for the display. Ranges are in nautical miles.
-///
-/// Threat level is currently a pure function of slant range. To move to a
-/// time-based scheme later, add closure-time thresholds here and extend
-/// `ThreatLevel.evaluate` to take the worse of the range and time verdicts.
+/// What the pilot can choose, which TCAS keeps firmly separate from what alerts
+/// them. On a TCAS traffic display the pilot picks the range and the altitude
+/// band — longer and wider in the cruise, tighter in the circuit to cut clutter
+/// — while the alerting thresholds are set automatically from own altitude.
+/// Those live in `AlertProfile`.
 struct AlertConfig {
-    /// Targets beyond this are not drawn at all; also the radius of the outer ring.
+
+    // MARK: Display — the pilot's to choose
+
+    /// Targets beyond this are not drawn; also the radius of the outer ring.
     var displayRangeNM: Double = 10.0
-    /// Inside this the whole screen goes amber.
-    var cautionRangeNM: Double = 5.0
-    /// Inside this the screen goes red and the offending arrow flashes.
-    var warningRangeNM: Double = 2.0
-    /// Ignore traffic more than this far above or below us (feet). Keeps airliners
-    /// in the flight levels from cluttering a low-level picture.
-    var verticalFilterFeet: Int = 5000
+    /// Which slice of altitude to draw, as a TCAS traffic display does.
+    var altitudeBand: AltitudeBand = .normal
+    /// Which set of alerting thresholds to apply.
+    var profileKind: AlertProfile.Kind = .generalAviation
+
+    var profile: AlertProfile { profileKind.profile }
+
+    /// Ring radii, as fractions of the selected range so the picture keeps its
+    /// shape whichever range is chosen.
+    var innerRingNM: Double { displayRangeNM * 0.2 }
+    var middleRingNM: Double { displayRangeNM * 0.5 }
+
+    /// The ranges offered in settings. TCAS equivalents are 3, 5, 10, 20 and 40 nm.
+    static let selectableRangesNM: [Double] = [5, 10, 20]
+
     /// Cap on how many arrows we draw at once, nearest first.
     var maxDisplayedTargets: Int = 12
     /// Drop a target that has not been heard from for this long.
@@ -62,6 +73,67 @@ struct AlertConfig {
     static let `default` = AlertConfig()
 }
 
+// MARK: - Altitude band
+
+/// Which slice of altitude to show, mirroring the ABV / N / BLW selector on a
+/// TCAS traffic display. This is a DISPLAY filter and nothing to do with
+/// alerting: an aircraft outside the band is simply not drawn.
+///
+/// The ±9,900 ft limit is TCAS's own: relative altitude is shown in hundreds of
+/// feet with two digits, so it cannot express more.
+enum AltitudeBand: String, CaseIterable, Identifiable, Sendable {
+    case normal
+    case above
+    case below
+    case unrestricted
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .normal:       return "Normal"
+        case .above:        return "Above"
+        case .below:        return "Below"
+        case .unrestricted: return "All"
+        }
+    }
+
+    /// How far above us to show traffic, in feet.
+    var ceilingFeet: Double {
+        switch self {
+        case .normal:       return 2700
+        case .above:        return 9900
+        case .below:        return 2700
+        case .unrestricted: return 9900
+        }
+    }
+
+    /// How far below us to show traffic, in feet.
+    var floorFeet: Double {
+        switch self {
+        case .normal:       return 2700
+        case .above:        return 2700
+        case .below:        return 9900
+        case .unrestricted: return 9900
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .normal:       return "±2,700 ft"
+        case .above:        return "+9,900 / −2,700 ft"
+        case .below:        return "+2,700 / −9,900 ft"
+        case .unrestricted: return "±9,900 ft"
+        }
+    }
+
+    /// Relative altitude in feet, positive above.
+    func includes(relativeAltitudeFeet: Int) -> Bool {
+        let value = Double(relativeAltitudeFeet)
+        return value <= ceilingFeet && value >= -floorFeet
+    }
+}
+
 // MARK: - Threat level
 
 enum ThreatLevel: Int, Comparable, Sendable {
@@ -78,11 +150,35 @@ enum ThreatLevel: Int, Comparable, Sendable {
         lhs.rawValue < rhs.rawValue
     }
 
-    static func evaluate(rangeNM: Double, config: AlertConfig) -> ThreatLevel {
-        if rangeNM <= config.warningRangeNM { return .warning }
-        if rangeNM <= config.cautionRangeNM { return .caution }
-        if rangeNM <= config.displayRangeNM { return .advisory }
-        return .clear
+    /// Applies the TCAS-style test at this altitude band's thresholds.
+    ///
+    /// A target in range is at least an advisory; it becomes a caution or a
+    /// warning only when the geometry says so — time to closest approach, with
+    /// distance and altitude floors for the slow-closure cases that time alone
+    /// misses. Range on its own no longer decides, which is why a target can be
+    /// red while still outside the inner ring.
+    static func evaluate(rangeNM: Double,
+                         closureKnots: Double?,
+                         relativeAltitudeFeet: Int?,
+                         verticalClosureFPM: Double?,
+                         level: SensitivityLevel,
+                         config: AlertConfig) -> ThreatLevel {
+        guard rangeNM <= config.displayRangeNM else { return .clear }
+
+        let separation = relativeAltitudeFeet.map(Double.init)
+        if AlertRule.isTriggered(rangeNM: rangeNM, closureKnots: closureKnots,
+                                 verticalSeparationFeet: separation,
+                                 verticalClosureFPM: verticalClosureFPM,
+                                 thresholds: level.warning) {
+            return .warning
+        }
+        if AlertRule.isTriggered(rangeNM: rangeNM, closureKnots: closureKnots,
+                                 verticalSeparationFeet: separation,
+                                 verticalClosureFPM: verticalClosureFPM,
+                                 thresholds: level.caution) {
+            return .caution
+        }
+        return .advisory
     }
 
     /// One step worse, for traffic that is on a collision bearing. This is what
@@ -106,6 +202,9 @@ struct Ownship: Equatable, Sendable {
     var geometricAltitudeFeet: Int?
     var trackDegrees: Double
     var groundSpeedKnots: Double
+    /// Our own rate of climb or descent, needed to work out how fast the
+    /// vertical gap to another aircraft is closing.
+    var verticalSpeedFPM: Double?
     var lastUpdate: Date
 }
 

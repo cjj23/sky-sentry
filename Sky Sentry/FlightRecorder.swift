@@ -90,9 +90,8 @@ final class FlightRecorder {
                 "startedUTC": ISO8601DateFormatter().string(from: Date()),
                 "source": source,
                 "displayRangeNM": config.displayRangeNM,
-                "cautionRangeNM": config.cautionRangeNM,
-                "warningRangeNM": config.warningRangeNM,
-                "verticalFilterFeet": config.verticalFilterFeet,
+                "altitudeBand": config.altitudeBand.rawValue,
+                "alertProfile": config.profileKind.rawValue,
                 "maxDisplayedTargets": config.maxDisplayedTargets,
             ]
             let json = try JSONSerialization.data(withJSONObject: metadata, options: [.prettyPrinted, .sortedKeys])

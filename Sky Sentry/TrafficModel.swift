@@ -195,6 +195,7 @@ final class TrafficModel {
                               geometricAltitudeFeet: ownship?.geometricAltitudeFeet,
                               trackDegrees: report.trackDegrees ?? 0,
                               groundSpeedKnots: report.groundSpeedKnots ?? 0,
+                              verticalSpeedFPM: report.verticalSpeedFPM,
                               lastUpdate: Date())
 
         case .ownshipGeometricAltitude(let feet):
@@ -293,13 +294,16 @@ final class TrafficModel {
                 continue
             }
 
+            // Altitude band is a DISPLAY filter, exactly as the ABV/N/BLW
+            // selector is on a TCAS traffic display: outside the band it is not
+            // drawn. It says nothing about whether the aircraft is a threat.
             var relativeAltitude: Int?
             if let theirs = target.altitudeFeet, let ours = ownship.pressureAltitudeFeet {
                 relativeAltitude = theirs - ours
-                if abs(theirs - ours) > config.verticalFilterFeet {
+                if !config.altitudeBand.includes(relativeAltitudeFeet: theirs - ours) {
                     filtered += 1
                     dispositions.append(TargetDisposition(target: target, rangeNM: range,
-                                                          outcome: .verticalFilter(relativeAltitude ?? 0)))
+                                                          outcome: .verticalFilter(theirs - ours)))
                     continue
                 }
             }
@@ -317,7 +321,22 @@ final class TrafficModel {
                 trend = track.trend(currentRange: range, config: config)
             }
 
-            let rangeThreat = ThreatLevel.evaluate(rangeNM: range, config: config)
+            // Rate at which the vertical gap is shrinking: positive means
+            // converging, whichever of the two is higher.
+            var verticalClosure: Double?
+            if let separation = relativeAltitude, let theirs = target.verticalSpeedFPM {
+                let rateOfChange = theirs - (ownship.verticalSpeedFPM ?? 0)
+                verticalClosure = separation >= 0 ? -rateOfChange : rateOfChange
+            }
+
+            let level = config.profile.level(
+                forOwnAltitudeFeet: ownship.pressureAltitudeFeet.map(Double.init))
+            let rangeThreat = ThreatLevel.evaluate(rangeNM: range,
+                                                   closureKnots: trend.closureKnots,
+                                                   relativeAltitudeFeet: relativeAltitude,
+                                                   verticalClosureFPM: verticalClosure,
+                                                   level: level,
+                                                   config: config)
             dispositions.append(TargetDisposition(target: target, rangeNM: range, outcome: .displayed))
 
             resolved.append(TrafficSolution(target: target,

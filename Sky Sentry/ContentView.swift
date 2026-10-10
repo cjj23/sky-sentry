@@ -10,6 +10,7 @@ struct ContentView: View {
     @State private var subscriptions = SubscriptionManager()
     @State private var showingHelp = false
     @State private var showingDiagnostics = false
+    @State private var showingSettings = false
     @AppStorage("hasAcceptedSafetyBriefing") private var hasAcceptedSafety = false
     @AppStorage("autoStartRecording") private var autoStartRecording = false
 
@@ -78,6 +79,7 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showingHelp) { HelpView() }
         .sheet(isPresented: $showingDiagnostics) { DiagnosticsView(model: model) }
+        .sheet(isPresented: $showingSettings) { SettingsView(model: model) }
     }
 
     // MARK: - Window sizing
@@ -181,6 +183,12 @@ struct ContentView: View {
                 Text(statusDetail)
                     .font(.system(size: 11, weight: .semibold, design: .rounded))
                     .foregroundStyle(palette.ink.opacity(0.85))
+
+                Button { showingSettings = true } label: {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                .foregroundStyle(palette.ink.opacity(0.85))
 
                 Button { showingDiagnostics = true } label: {
                     Image(systemName: "waveform.path.ecg")

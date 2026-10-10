@@ -178,8 +178,8 @@ struct RadarView: View {
     private func drawRings(_ context: inout GraphicsContext, centre: CGPoint,
                            maxRadius: CGFloat, scale: CGFloat) {
         let rings: [(range: Double, dashed: Bool)] = [
-            (config.warningRangeNM, true),
-            (config.cautionRangeNM, true),
+            (config.innerRingNM, true),
+            (config.middleRingNM, true),
             (config.displayRangeNM, false),
         ]
 

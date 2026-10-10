@@ -82,12 +82,12 @@ final class TrafficSimulator {
             // Slow helicopter off to the left, descending.
             Script(address: 0x40E5F6, callsign: "GHELI", initialRangeNM: 3.0,
                    initialBearing: 285, track: 20, speedKnots: 70,
-                   altitude: 2500, verticalSpeed: -400, emitter: 7),   // rotorcraft
+                   altitude: 2500, verticalSpeed: -700, emitter: 7),   // rotorcraft
 
             // Overtaking us from behind, slightly above.
             Script(address: 0x401122, callsign: "GTAIL", initialRangeNM: 7.5,
                    initialBearing: 225, track: 45, speedKnots: 165,
-                   altitude: 3400, verticalSpeed: 100),
+                   altitude: 3400, verticalSpeed: 800),
 
             // Airliner in the flight levels — well within 10 nm laterally, but it
             // should be filtered out by the vertical limit rather than cluttering.

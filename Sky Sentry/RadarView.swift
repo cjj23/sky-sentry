@@ -291,8 +291,12 @@ struct RadarView: View {
         context.stroke(path, with: .color(palette.inkOutline),
                        style: StrokeStyle(lineWidth: 2 * scale, lineJoin: .round))
 
-        // Only label the ones that matter, to keep a busy circuit readable.
-        guard mayLabel, solution.threat >= .caution || solution.isConverging else { return }
+        // Height is shown on every aircraft we draw, as a TCAS traffic display
+        // does — it is the quickest discriminator between an aircraft worth
+        // looking for and one passing 2,000 ft over the top. The rest of the
+        // detail is kept for the ones that matter, so a busy circuit stays
+        // readable.
+        guard mayLabel else { return }
 
         // Offset across the arrow rather than along it, so labels stay clear of
         // the range-ring numbers that sit on the vertical. Two aircraft on a
@@ -312,33 +316,54 @@ struct RadarView: View {
 
     private func drawLabel(_ context: inout GraphicsContext, solution: TrafficSolution,
                            at point: CGPoint, scale: CGFloat) {
-        var lines = [solution.rangeLabel]
+        // Height is the thing most worth reading quickly — co-altitude traffic
+        // is the dangerous kind — so it gets the largest text, and it is written
+        // ABOVE the rest when the aircraft is above us and BELOW when it is
+        // below. Position says it as well as the sign does, which is TCAS's
+        // convention and is far quicker to read than parsing "+" or "−".
+        var middle: [String] = []
+        if solution.threat >= .caution || solution.isConverging {
+            middle.append(solution.rangeLabel)
+            if let category = solution.target.category.shortLabel {
+                middle.append(category)
+            }
+            if solution.relativeBearing == nil {
+                middle.append("NO BRG")
+            }
+            if solution.isConverging {
+                // The countdown to closest approach is more use than the word alone.
+                middle.append(solution.cpaLabel.map { "CBDR \($0)" } ?? "CBDR")
+            }
+        }
+
+        // Nothing at all to say about this one.
+        guard solution.altitudeLabel != nil || !middle.isEmpty else { return }
+
+        // Labels shrink more slowly than the geometry: below about 11pt they
+        // stop being readable at a glance, which defeats the point.
+        let bodySize = max(11, 13 * scale)
+        let altitudeSize = max(13, 16 * scale)
+
+        var lines: [(text: String, size: CGFloat)] = middle.map { ($0, bodySize) }
+
         if let altitude = solution.altitudeLabel {
-            lines.append(altitude)
-        }
-        // Only noteworthy categories produce a tag — a glider or a helicopter is
-        // looked for differently, whereas "light" is the default assumption and
-        // would just be clutter on every arrow.
-        if let category = solution.target.category.shortLabel {
-            lines.append(category)
-        }
-        if solution.relativeBearing == nil {
-            lines.append("NO BRG")
-        }
-        if solution.isConverging {
-            // The countdown to closest approach is more use than the word alone.
-            lines.append(solution.cpaLabel.map { "CBDR \($0)" } ?? "CBDR")
+            // A climb or descent arrow rides with it, past 500 fpm.
+            let trend = solution.verticalTrend.map { " \($0)" } ?? ""
+            let entry = (altitude + trend, altitudeSize)
+            if solution.isAbove {
+                lines.insert(entry, at: 0)
+            } else {
+                lines.append(entry)
+            }
         }
 
         // Each line is drawn separately: Canvas can only resolve a Text, and the
         // layout modifiers that would centre a multi-line string return a View.
-        // Labels shrink more slowly than the geometry: below about 11pt they
-        // stop being readable at a glance, which defeats the point.
-        let fontSize = max(11, 13 * scale)
-        for (index, line) in lines.enumerated() {
-            let text = Text(line)
-                .font(.system(size: fontSize, weight: .heavy, design: .rounded))
-            let origin = CGPoint(x: point.x, y: point.y + CGFloat(index) * (fontSize + 1))
+        var y = point.y - lines.reduce(0) { $0 + $1.size + 1 } / 2
+        for line in lines {
+            let text = Text(line.text)
+                .font(.system(size: line.size, weight: .heavy, design: .rounded))
+            let origin = CGPoint(x: point.x, y: y + line.size / 2)
 
             // Outline colour offset behind, so the figures stay readable wherever they land.
             let shadow = context.resolve(text.foregroundStyle(palette.inkOutline))
@@ -346,6 +371,8 @@ struct RadarView: View {
 
             let body = context.resolve(text.foregroundStyle(palette.ink))
             context.draw(body, at: origin, anchor: .center)
+
+            y += line.size + 1
         }
     }
 }

@@ -353,12 +353,26 @@ struct TrafficSolution: Identifiable, Equatable, Sendable {
         return "\(Int(secondsToCPA.rounded()))s"
     }
 
-    /// "+12" / "-05" in hundreds of feet, the way a TCAS display reads.
+    /// "+12" / "-05" in hundreds of feet, the way a TCAS display reads. Nil
+    /// when the aircraft is not reporting altitude — TCAS shows nothing at all
+    /// in that case rather than implying a separation it does not know.
     var altitudeLabel: String? {
         guard let relativeAltitudeFeet else { return nil }
         let hundreds = Int((Double(relativeAltitudeFeet) / 100.0).rounded())
-        if hundreds == 0 { return "  0" }
+        if hundreds == 0 { return "00" }
         return String(format: "%@%02d", hundreds > 0 ? "+" : "-", abs(hundreds))
+    }
+
+    /// True when the aircraft is above us. Drives which side of the label the
+    /// altitude is written on, so position says it as well as the sign does.
+    var isAbove: Bool { (relativeAltitudeFeet ?? 0) >= 0 }
+
+    /// Climb or descent arrow, shown only beyond 500 fpm — TCAS's threshold,
+    /// below which the trend is not worth drawing attention to.
+    var verticalTrend: String? {
+        guard relativeAltitudeFeet != nil,
+              let rate = target.verticalSpeedFPM, abs(rate) > 500 else { return nil }
+        return rate > 0 ? "\u{2191}" : "\u{2193}"
     }
 
     var rangeLabel: String {

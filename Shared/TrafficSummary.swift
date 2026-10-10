@@ -31,6 +31,8 @@ struct TrafficSummary: Equatable, Sendable {
     var rangeNM: Double?
     var relativeAltitudeFeet: Int?
     var isConverging: Bool = false
+    /// Short category tag ("HELI", "GLIDER") when the type is noteworthy.
+    var categoryLabel: String?
     var secondsToCPA: Double?
     /// False when the phone has no usable picture — no receiver, or stale data.
     /// The watch must stay silent rather than imply the sky is clear.
@@ -48,6 +50,7 @@ struct TrafficSummary: Equatable, Sendable {
         static let converging = "c"
         static let cpa = "p"
         static let hasPicture = "h"
+        static let category = "g"
     }
 
     var dictionary: [String: Any] {
@@ -60,6 +63,7 @@ struct TrafficSummary: Equatable, Sendable {
         if let rangeNM { payload[Key.range] = rangeNM }
         if let relativeAltitudeFeet { payload[Key.altitude] = relativeAltitudeFeet }
         if let secondsToCPA { payload[Key.cpa] = secondsToCPA }
+        if let categoryLabel { payload[Key.category] = categoryLabel }
         return payload
     }
 
@@ -73,6 +77,7 @@ struct TrafficSummary: Equatable, Sendable {
         isConverging = dictionary[Key.converging] as? Bool ?? false
         secondsToCPA = dictionary[Key.cpa] as? Double
         hasPicture = dictionary[Key.hasPicture] as? Bool ?? false
+        categoryLabel = dictionary[Key.category] as? String
     }
 
     // MARK: - Convenience

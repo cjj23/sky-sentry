@@ -109,6 +109,80 @@ struct Ownship: Equatable, Sendable {
     var lastUpdate: Date
 }
 
+// MARK: - Emitter category
+
+/// What kind of thing is out there, straight from the GDL90 traffic report.
+///
+/// This arrives free in every report and needs no lookup, no database and no
+/// internet — which matters, because a registration lookup would need all three.
+/// It is also the part that actually changes a pilot's scan: a glider, a
+/// helicopter and an airliner are looked for in different places, at different
+/// speeds, with different closure.
+enum EmitterCategory: UInt8, Sendable {
+    case unknown = 0
+    case light = 1
+    case small = 2
+    case large = 3
+    case highVortexLarge = 4
+    case heavy = 5
+    case highlyManoeuvrable = 6
+    case rotorcraft = 7
+    case glider = 9
+    case lighterThanAir = 10
+    case parachutist = 11
+    case ultralight = 12
+    case uav = 14
+    case spaceVehicle = 15
+    case surfaceEmergencyVehicle = 17
+    case surfaceServiceVehicle = 18
+    case pointObstacle = 19
+    case clusterObstacle = 20
+    case lineObstacle = 21
+
+    init(code: UInt8) {
+        self = EmitterCategory(rawValue: code) ?? .unknown
+    }
+
+    /// Not aircraft: ground vehicles and obstacles are reported on the same
+    /// datalink but are not traffic to avoid in the air, and showing a tethered
+    /// balloon or an airfield service van as converging traffic would be absurd.
+    var isAirborneTraffic: Bool {
+        switch self {
+        case .surfaceEmergencyVehicle, .surfaceServiceVehicle,
+             .pointObstacle, .clusterObstacle, .lineObstacle:
+            return false
+        default:
+            return true
+        }
+    }
+
+    /// Short tag for the display, and nil when it would be noise.
+    ///
+    /// Most GA traffic is "light", which is the default assumption anyway, so
+    /// labelling every arrow LIGHT would add clutter and tell the pilot nothing.
+    /// Only categories that change what you are looking for get a tag.
+    var shortLabel: String? {
+        switch self {
+        case .unknown, .light, .small:  return nil
+        case .large, .highVortexLarge:  return "LARGE"
+        case .heavy:                    return "HEAVY"
+        case .highlyManoeuvrable:       return "FAST"
+        case .rotorcraft:               return "HELI"
+        case .glider:                   return "GLIDER"
+        case .lighterThanAir:           return "BALLOON"
+        case .parachutist:              return "CHUTE"
+        case .ultralight:               return "MICRO"
+        case .uav:                      return "DRONE"
+        case .spaceVehicle:             return "SPACE"
+        case .surfaceEmergencyVehicle,
+             .surfaceServiceVehicle:    return "VEHICLE"
+        case .pointObstacle,
+             .clusterObstacle,
+             .lineObstacle:             return "OBSTACLE"
+        }
+    }
+}
+
 // MARK: - Traffic target
 
 struct TrafficTarget: Identifiable, Equatable, Sendable {
@@ -128,6 +202,7 @@ struct TrafficTarget: Identifiable, Equatable, Sendable {
     var groundSpeedKnots: Double?
     var verticalSpeedFPM: Double?
     var isAirborne: Bool
+    var category: EmitterCategory = .unknown
     var lastUpdate: Date
 
     var id: UInt32 { icaoAddress }

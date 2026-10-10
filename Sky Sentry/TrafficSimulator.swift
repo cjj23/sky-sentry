@@ -44,6 +44,8 @@ final class TrafficSimulator {
         let speedKnots: Double
         let altitude: Int
         let verticalSpeed: Double
+        /// GDL90 emitter category, so the display can show what kind of thing it is.
+        var emitter: UInt8 = 1
 
         var latitude: Double = 0
         var longitude: Double = 0
@@ -75,12 +77,12 @@ final class TrafficSimulator {
             // Crossing left to right, co-altitude, stays in the caution band.
             Script(address: 0x40C3D4, callsign: "GXYZW", initialRangeNM: 4.2,
                    initialBearing: 300, track: 110, speedKnots: 95,
-                   altitude: 2900, verticalSpeed: 0),
+                   altitude: 2900, verticalSpeed: 0, emitter: 9),      // glider
 
             // Slow helicopter off to the left, descending.
             Script(address: 0x40E5F6, callsign: "GHELI", initialRangeNM: 3.0,
                    initialBearing: 285, track: 20, speedKnots: 70,
-                   altitude: 2500, verticalSpeed: -400),
+                   altitude: 2500, verticalSpeed: -400, emitter: 7),   // rotorcraft
 
             // Overtaking us from behind, slightly above.
             Script(address: 0x401122, callsign: "GTAIL", initialRangeNM: 7.5,
@@ -91,7 +93,7 @@ final class TrafficSimulator {
             // should be filtered out by the vertical limit rather than cluttering.
             Script(address: 0x4004F2, callsign: "BAW23G", initialRangeNM: 6.0,
                    initialBearing: 150, track: 270, speedKnots: 420,
-                   altitude: 24000, verticalSpeed: 1500),
+                   altitude: 24000, verticalSpeed: 1500, emitter: 5),  // heavy
         ]
 
         for i in defs.indices {
@@ -161,7 +163,8 @@ final class TrafficSimulator {
                                       positionValid: true, altitudeFeet: script.altitude,
                                       isAirborne: true, groundSpeedKnots: script.speedKnots,
                                       verticalSpeedFPM: script.verticalSpeed,
-                                      trackDegrees: script.track, emitterCategory: 1,
+                                      trackDegrees: script.track,
+                                      emitterCategory: script.emitter,
                                       callsign: script.callsign)
             onPacket?(GDL90.encodeReport(id: .trafficReport, report: report))
         }

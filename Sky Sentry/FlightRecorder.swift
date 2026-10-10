@@ -214,6 +214,7 @@ final class FlightRecorder {
             if let track = target.trackDegrees { entry["track"] = track }
             if let speed = target.groundSpeedKnots { entry["gs"] = speed }
             entry["airborne"] = target.isAirborne
+            entry["category"] = target.category.rawValue
             return entry
         }
 

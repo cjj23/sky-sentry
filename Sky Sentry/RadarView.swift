@@ -316,6 +316,12 @@ struct RadarView: View {
         if let altitude = solution.altitudeLabel {
             lines.append(altitude)
         }
+        // Only noteworthy categories produce a tag — a glider or a helicopter is
+        // looked for differently, whereas "light" is the default assumption and
+        // would just be clutter on every arrow.
+        if let category = solution.target.category.shortLabel {
+            lines.append(category)
+        }
         if solution.relativeBearing == nil {
             lines.append("NO BRG")
         }

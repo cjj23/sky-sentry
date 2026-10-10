@@ -51,6 +51,7 @@ final class WatchLink: NSObject {
             summary.isConverging = subject.isConverging
             summary.secondsToCPA = subject.secondsToCPA
             summary.side = Self.side(forRelativeBearing: subject.relativeBearing)
+            summary.categoryLabel = subject.target.category.shortLabel
         }
 
         send(summary)

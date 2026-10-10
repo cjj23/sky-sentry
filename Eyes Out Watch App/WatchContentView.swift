@@ -118,7 +118,9 @@ struct WatchContentView: View {
     }
 
     private func detail(for summary: TrafficSummary) -> String {
-        var parts = ["\(summary.rangeLabel) NM"]
+        var parts: [String] = []
+        if let category = summary.categoryLabel { parts.append(category) }
+        parts.append("\(summary.rangeLabel) NM")
         if let altitude = summary.altitudeLabel { parts.append(altitude) }
         if let seconds = summary.secondsToCPA, summary.isConverging, seconds > 0 {
             parts.append("\(Int(seconds.rounded()))s")

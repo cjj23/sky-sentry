@@ -243,7 +243,11 @@ struct ContentView: View {
             return "NOTHING WITHIN \(Int(model.config.displayRangeNM)) NM"
         }
 
-        var text = "\(subject.target.shortLabel)  \(subject.rangeLabel) NM"
+        var text = subject.target.shortLabel
+        if let category = subject.target.category.shortLabel {
+            text += " (\(category))"
+        }
+        text += "  \(subject.rangeLabel) NM"
         if let feet = subject.relativeAltitudeFeet {
             text += String(format: "  %@%d FT", feet >= 0 ? "+" : "-", abs(feet))
         }

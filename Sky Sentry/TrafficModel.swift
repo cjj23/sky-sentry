@@ -212,6 +212,7 @@ final class TrafficModel {
                                                     groundSpeedKnots: report.groundSpeedKnots,
                                                     verticalSpeedFPM: report.verticalSpeedFPM,
                                                     isAirborne: report.isAirborne,
+                                                    category: EmitterCategory(code: report.emitterCategory),
                                                     lastUpdate: Date())
 
         case .other:
@@ -261,6 +262,15 @@ final class TrafficModel {
         var dispositions: [TargetDisposition] = []
 
         for target in targets.values {
+            // Ground vehicles and obstacles share the datalink but are not
+            // traffic to avoid in the air. Still recorded, so the diagnostic log
+            // shows they were heard rather than missed.
+            guard target.category.isAirborneTraffic else {
+                dispositions.append(TargetDisposition(target: target, rangeNM: nil,
+                                                      outcome: .notAircraft))
+                continue
+            }
+
             // Work out where it is. A located target gives range and bearing; a
             // range-only contact (Mode S, bearingless FLARM) gives range alone.
             let range: Double
@@ -364,6 +374,7 @@ struct TargetDisposition {
         case verticalFilter(Int)
         case noPosition
         case cappedByLimit
+        case notAircraft
 
         /// Detailed, per-target, for the log line.
         var label: String {
@@ -373,6 +384,7 @@ struct TargetDisposition {
             case .verticalFilter(let ft): return "vertical-filter(\(ft)ft)"
             case .noPosition:             return "no-position"
             case .cappedByLimit:          return "capped-by-limit"
+            case .notAircraft:            return "not-aircraft"
             }
         }
 
@@ -386,6 +398,7 @@ struct TargetDisposition {
             case .verticalFilter: return "vertical-filter"
             case .noPosition:     return "no-position"
             case .cappedByLimit:  return "capped-by-limit"
+            case .notAircraft:    return "not-aircraft"
             }
         }
     }

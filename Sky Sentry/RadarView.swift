@@ -79,10 +79,28 @@ struct RadarView: View {
         }
     }
 
+    /// Margin kept clear at the edge so arrowheads sit proud rather than touching.
+    private let edgeInset: CGFloat = 12
+
     private func draw(_ context: inout GraphicsContext, size: CGSize, time: TimeInterval) {
-        let centre = CGPoint(x: size.width / 2, y: size.height / 2)
-        // Leave room for the arrowheads to sit proud at the rim.
-        let maxRadius = min(size.width, size.height) / 2 - 12
+        let bias = config.forwardBias
+        let centre: CGPoint
+        let maxRadius: CGFloat
+
+        // The largest circle that fits whole, which is what "centred" draws.
+        let fittedRadius = min(size.width, size.height) / 2 - edgeInset
+        maxRadius = fittedRadius * bias.zoom
+
+        // Ownship sits just far enough down that the full range is still
+        // visible ahead — no further. Never above the middle, and never so low
+        // that nothing is left behind. The scale stays uniform in every
+        // direction, so the rings are true circles; they simply run off the
+        // sides and the bottom, and traffic out there is drawn at the edge.
+        let forwardFit = maxRadius + edgeInset
+        let lowestSensible = size.height * 0.72
+        let y = min(max(size.height / 2, forwardFit), lowestSensible)
+        centre = CGPoint(x: size.width / 2, y: y)
+
         // Below this there is not enough room for the picture to mean anything.
         guard maxRadius > 26 else { return }
 
@@ -122,12 +140,27 @@ struct RadarView: View {
                                     placedLabels: &placedLabels)
             } else {
                 drawArrow(&context, solution: solution, centre: centre,
-                          maxRadius: maxRadius, time: time, scale: scale,
+                          maxRadius: maxRadius, size: size, time: time, scale: scale,
                           mayLabel: labelled.contains(solution.target.icaoAddress),
                           placedLabels: &placedLabels)
             }
         }
     }
+
+    /// How far the view's edge is from a point, along a direction. Used to pin
+    /// arrowheads to the screen edge once the rim runs off it.
+    private func distanceToEdge(from centre: CGPoint, ux: CGFloat, uy: CGFloat,
+                                in size: CGSize) -> CGFloat {
+        var distance = CGFloat.greatestFiniteMagnitude
+        if ux > 0.0001  { distance = min(distance, (size.width - edgeInset - centre.x) / ux) }
+        if ux < -0.0001 { distance = min(distance, (edgeInset - centre.x) / ux) }
+        if uy > 0.0001  { distance = min(distance, (size.height - edgeInset - centre.y) / uy) }
+        if uy < -0.0001 { distance = min(distance, (edgeInset - centre.y) / uy) }
+        return max(headLengthFloor, distance)
+    }
+
+    /// Never collapse an arrow to nothing, even if ownship sits on the edge.
+    private var headLengthFloor: CGFloat { nominalHeadLength * 0.6 }
 
     // MARK: Bearingless contacts
 
@@ -237,8 +270,8 @@ struct RadarView: View {
     // MARK: Arrows
 
     private func drawArrow(_ context: inout GraphicsContext, solution: TrafficSolution,
-                           centre: CGPoint, maxRadius: CGFloat, time: TimeInterval,
-                           scale: CGFloat, mayLabel: Bool,
+                           centre: CGPoint, maxRadius: CGFloat, size: CGSize,
+                           time: TimeInterval, scale: CGFloat, mayLabel: Bool,
                            placedLabels: inout [CGPoint]) {
         guard let relativeBearing = solution.relativeBearing else { return }
 
@@ -254,16 +287,27 @@ struct RadarView: View {
                     y: centre.y + uy * radius + py * across)
         }
 
-        let shoulder = maxRadius - headLength
-        // Where the target actually is: the tail tip lands on its range ring.
+        // With a forward bias the rim runs off the screen to the sides and
+        // behind, so the head sits at whichever comes first: the rim, or the
+        // edge of the view. The tail tip still lands on the true range ring, so
+        // distance is never misrepresented — only the pointer is shortened.
+        let edge = distanceToEdge(from: centre, ux: ux, uy: uy, in: size)
+        let headRadius = min(maxRadius, edge)
         let ringRadius = maxRadius * CGFloat(solution.rangeNM / config.displayRangeNM)
+
+        // Beyond the edge entirely: show the head alone at the correct relative
+        // bearing, as a TCAS display does with its half symbols, so nothing is
+        // silently dropped just because it will not fit.
+        let isOffScreen = ringRadius > edge
+
+        let shoulder = headRadius - headLength
         let tailRadius = min(ringRadius, shoulder - 2)
 
         var path = Path()
-        path.move(to: point(maxRadius))
+        path.move(to: point(headRadius))
         path.addLine(to: point(shoulder, across: headWidth / 2))
 
-        if tailRadius < shoulder - 2 {
+        if !isOffScreen, tailRadius < shoulder - 2 {
             path.addLine(to: point(shoulder, across: shaftWidth / 2))
             path.addLine(to: point(tailRadius, across: shaftWidth * 0.3))
             path.addLine(to: point(tailRadius, across: -shaftWidth * 0.3))
@@ -302,7 +346,9 @@ struct RadarView: View {
         // the range-ring numbers that sit on the vertical. Two aircraft on a
         // similar bearing would otherwise print on top of each other, so try a
         // few positions and take the first that is clear of what is already drawn.
-        let labelRadius = max(tailRadius - 12 * scale, 34 * scale)
+        let labelRadius = isOffScreen
+            ? max(headRadius - headLength - 18 * scale, 34 * scale)
+            : max(tailRadius - 12 * scale, 34 * scale)
         let offsets: [CGFloat] = [shaftWidth + 20 * scale, -(shaftWidth + 20 * scale),
                                   shaftWidth + 62 * scale, -(shaftWidth + 62 * scale)]
         let candidates = offsets.map { point(labelRadius, across: $0) }
@@ -311,7 +357,18 @@ struct RadarView: View {
         } ?? candidates[0]
 
         placedLabels.append(anchor)
-        drawLabel(&context, solution: solution, at: anchor, scale: scale)
+        drawLabel(&context, solution: solution, at: clamped(anchor, in: size, scale: scale),
+                  scale: scale)
+    }
+
+    /// Keeps a label inside the view. With a forward bias the arrowheads sit on
+    /// the edge, and an un-clamped label beside one runs straight off it.
+    private func clamped(_ point: CGPoint, in size: CGSize, scale: CGFloat) -> CGPoint {
+        let halfWidth = 38 * scale
+        let halfHeight = 24 * scale
+        return CGPoint(
+            x: min(max(point.x, halfWidth), size.width - halfWidth),
+            y: min(max(point.y, halfHeight), size.height - halfHeight))
     }
 
     private func drawLabel(_ context: inout GraphicsContext, solution: TrafficSolution,

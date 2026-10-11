@@ -25,6 +25,8 @@ struct AlertConfig {
     var altitudeBand: AltitudeBand = .normal
     /// Which set of alerting thresholds to apply.
     var profileKind: AlertProfile.Kind = .generalAviation
+    /// Where ownship sits, trading rear and lateral coverage for what is ahead.
+    var forwardBias: ForwardBias = .centred
 
     var profile: AlertProfile { profileKind.profile }
 
@@ -71,6 +73,90 @@ struct AlertConfig {
     var cbdrWindow: TimeInterval = 12
 
     static let `default` = AlertConfig()
+
+    // MARK: Persistence
+    //
+    // Display choices survive a relaunch. Re-picking range, altitude band and
+    // bias before every flight is exactly the sort of step that gets forgotten.
+
+    private enum Key {
+        static let range = "displayRangeNM"
+        static let band = "altitudeBand"
+        static let profile = "alertProfile"
+        static let bias = "forwardBias"
+    }
+
+    static func loaded() -> AlertConfig {
+        var config = AlertConfig()
+        let defaults = UserDefaults.standard
+
+        let range = defaults.double(forKey: Key.range)
+        if selectableRangesNM.contains(range) { config.displayRangeNM = range }
+        if let raw = defaults.string(forKey: Key.band),
+           let band = AltitudeBand(rawValue: raw) { config.altitudeBand = band }
+        if let raw = defaults.string(forKey: Key.profile),
+           let kind = AlertProfile.Kind(rawValue: raw) { config.profileKind = kind }
+        if let raw = defaults.string(forKey: Key.bias),
+           let bias = ForwardBias(rawValue: raw) { config.forwardBias = bias }
+        return config
+    }
+
+    func save() {
+        let defaults = UserDefaults.standard
+        defaults.set(displayRangeNM, forKey: Key.range)
+        defaults.set(altitudeBand.rawValue, forKey: Key.band)
+        defaults.set(profileKind.rawValue, forKey: Key.profile)
+        defaults.set(forwardBias.rawValue, forKey: Key.bias)
+    }
+}
+
+// MARK: - Forward bias
+
+/// Where ownship sits on the display.
+///
+/// Moving it down devotes more of the screen to what is ahead, which is where
+/// the threats are for a faster aircraft. The scale stays uniform in every
+/// direction — the picture is never stretched — so what actually changes is
+/// that the same range is drawn larger ahead, at the cost of seeing less to the
+/// sides and behind. Traffic pushed off the edge is not dropped: it is shown as
+/// an arrowhead at the edge on the correct relative bearing, as a TCAS display
+/// does with its half symbols.
+enum ForwardBias: String, CaseIterable, Identifiable, Sendable {
+    case centred
+    case slight
+    case strong
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .centred: return "Centred"
+        case .slight:  return "Slight"
+        case .strong:  return "Strong"
+        }
+    }
+
+    /// How much bigger the picture is drawn than the largest circle that fits
+    /// whole. Everything follows from this: the bigger the picture, the lower
+    /// ownship has to sit for the full range to still be visible ahead, and the
+    /// more is lost to the sides and behind. Setting the offset directly and
+    /// deriving the size from it — the obvious way round — zooms in violently
+    /// and strands traffic off the edges.
+    var zoom: Double {
+        switch self {
+        case .centred: return 1.0
+        case .slight:  return 1.50
+        case .strong:  return 1.8
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .centred: return "Equal all round"
+        case .slight:  return "More ahead, about 7 nm to the sides"
+        case .strong:  return "Most ahead, about 5 nm to the sides"
+        }
+    }
 }
 
 // MARK: - Altitude band

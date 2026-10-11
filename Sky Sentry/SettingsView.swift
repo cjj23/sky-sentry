@@ -25,6 +25,7 @@ struct SettingsView: View {
         NavigationStack {
             List {
                 rangeSection
+                forwardBiasSection
                 altitudeSection
                 profileSection
                 activeThresholdsSection
@@ -65,6 +66,31 @@ struct SettingsView: View {
     private var ringText: String {
         String(format: "%.0f and %.0f nm",
                model.config.innerRingNM, model.config.middleRingNM)
+    }
+
+    private var forwardBiasSection: some View {
+        Section {
+            Picker("Ownship position", selection: Binding(
+                get: { model.config.forwardBias },
+                set: { model.config.forwardBias = $0 }
+            )) {
+                ForEach(ForwardBias.allCases) { bias in
+                    Text(bias.title).tag(bias)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            LabeledContent("Showing", value: model.config.forwardBias.detail)
+        } header: {
+            Text("Forward bias")
+        } footer: {
+            Text("Moves you down the screen so more of it shows what is ahead, "
+                 + "which is where the threats are for a faster aircraft. The "
+                 + "scale stays the same in every direction — the picture is "
+                 + "never stretched — so the trade is seeing less to the sides "
+                 + "and behind. Traffic pushed off the edge still appears as an "
+                 + "arrowhead at the edge, on the correct bearing.")
+        }
     }
 
     private var altitudeSection: some View {

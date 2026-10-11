@@ -38,8 +38,11 @@ final class TrafficModel {
     let watchLink = WatchLink()
     let location = LocationProvider()
 
-    var config = AlertConfig.default {
-        didSet { recompute() }
+    var config = AlertConfig.loaded() {
+        didSet {
+            config.save()
+            recompute()
+        }
     }
 
     /// Remembered across launches: having to reselect the receiver before every

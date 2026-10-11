@@ -38,6 +38,10 @@ enum AppInfo {
     This app is an aid to lookout. It is not a collision avoidance system, not \
     an anti-collision system, and not a navigation system.
 
+    It is not TCAS. It will never tell you to climb, descend or turn, and it \
+    issues no resolution advisories of any kind. Where it uses thresholds taken \
+    from TCAS, it borrows the numbers and nothing else.
+
     It shows only aircraft that your connected receiver reports to it. Many \
     aircraft cannot be seen by it at all. You must continue to maintain a full \
     visual lookout at all times and comply with the Rules of the Air.

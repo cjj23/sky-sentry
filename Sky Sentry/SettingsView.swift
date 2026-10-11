@@ -133,6 +133,16 @@ struct SettingsView: View {
             Text(model.config.profileKind.detail)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            if let caveat = model.config.profileKind.caveat {
+                Label {
+                    Text(caveat).font(.caption)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                }
+                .padding(.vertical, 2)
+            }
         } header: {
             Text("Alert profile")
         } footer: {

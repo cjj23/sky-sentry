@@ -66,7 +66,10 @@ struct AlertProfile: Equatable, Sendable {
         var title: String {
             switch self {
             case .generalAviation: return "General aviation"
-            case .tcasII:          return "TCAS II"
+            // Deliberately not "TCAS II" and not "TCAS equivalent". This is not
+            // TCAS and is not equivalent to it — "equivalent" is the worst word
+            // available, because in aviation it reads as meeting the standard.
+            case .tcasII:          return "TCAS-style"
             }
         }
 
@@ -77,9 +80,27 @@ struct AlertProfile: Equatable, Sendable {
                      + "window takes far longer than flying a resolution advisory, "
                      + "so the thresholds allow time to look, find it and decide."
             case .tcasII:
-                return "The published TCAS II v7.1 thresholds. Tighter, and tuned "
-                     + "for airliners with coordinated manoeuvres rather than for "
-                     + "see and avoid. Included for comparison."
+                return "Uses the published TCAS II v7.1 alerting distances and "
+                     + "times. Tighter than the above, and tuned for airliners "
+                     + "flying coordinated manoeuvres rather than for see and "
+                     + "avoid. Included for comparison."
+            }
+        }
+
+        /// Shown wherever the profile is chosen. The point is not decoration:
+        /// a pilot seeing "TCAS" in a menu could reasonably assume they are
+        /// getting TCAS, and they are not.
+        var caveat: String? {
+            switch self {
+            case .generalAviation:
+                return nil
+            case .tcasII:
+                return "This is NOT TCAS. It borrows TCAS's thresholds, nothing "
+                     + "more. It does not interrogate transponders, it cannot see "
+                     + "aircraft that are not broadcasting ADS-B, it is not "
+                     + "coordinated with the other aircraft, and it will never "
+                     + "issue a resolution advisory or tell you to climb or "
+                     + "descend. Red means look for this aircraft now."
             }
         }
 

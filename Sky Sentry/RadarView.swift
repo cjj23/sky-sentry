@@ -194,7 +194,7 @@ struct RadarView: View {
             // Range label sits just below the ring on the vertical, clear of most arrows.
             let label = context.resolve(
                 Text("\(Int(ring.range))")
-                    .font(.system(size: 12 * scale, weight: .semibold, design: .rounded))
+                    .font(.annunciatorDetail(12 * scale, weight: .semibold))
                     .foregroundStyle(palette.ring)
             )
             context.draw(label, at: CGPoint(x: centre.x, y: centre.y + radius - 10 * scale),
@@ -362,7 +362,7 @@ struct RadarView: View {
         var y = point.y - lines.reduce(0) { $0 + $1.size + 1 } / 2
         for line in lines {
             let text = Text(line.text)
-                .font(.system(size: line.size, weight: .heavy, design: .rounded))
+                .font(.trafficLabel(line.size))
             let origin = CGPoint(x: point.x, y: y + line.size / 2)
 
             // Outline colour offset behind, so the figures stay readable wherever they land.

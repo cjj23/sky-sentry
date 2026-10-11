@@ -121,7 +121,8 @@ struct ContentView: View {
             }
 
             Text(statusWord)
-                .font(.system(size: 16, weight: .black, design: .rounded))
+                .font(.annunciator(16))
+                .tracking(Font.annunciatorTracking(16))
                 .foregroundStyle(palette.ink)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
@@ -129,7 +130,7 @@ struct ContentView: View {
             Spacer(minLength: 4)
 
             Text(compactDetail)
-                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .font(.annunciatorDetail(12))
                 .foregroundStyle(palette.ink.opacity(0.9))
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
@@ -161,7 +162,7 @@ struct ContentView: View {
         VStack(spacing: 2) {
             HStack {
                 Text(model.source.rawValue)
-                    .font(.system(size: 11, weight: .heavy, design: .rounded))
+                    .font(.annunciatorDetail(11, weight: .heavy))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
                     .background(
@@ -181,7 +182,7 @@ struct ContentView: View {
                 Spacer()
 
                 Text(statusDetail)
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .font(.annunciatorDetail(11, weight: .semibold))
                     .foregroundStyle(palette.ink.opacity(0.85))
 
                 Button { showingSettings = true } label: {
@@ -204,13 +205,14 @@ struct ContentView: View {
             }
 
             Text(statusWord)
-                .font(.system(size: 32, weight: .black, design: .rounded))
+                .font(.annunciator(32))
+                .tracking(Font.annunciatorTracking(32))
                 .foregroundStyle(palette.ink)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
 
             Text(nearestDetail)
-                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .font(.annunciatorDetail(13))
                 .foregroundStyle(palette.ink.opacity(0.9))
         }
         .padding(.horizontal, 14)
@@ -280,7 +282,7 @@ struct ContentView: View {
             .pickerStyle(.segmented)
 
             Text(AppInfo.oneLineDisclaimer)
-                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .font(.annunciatorDetail(10, weight: .medium))
                 .foregroundStyle(palette.ink.opacity(0.7))
                 .multilineTextAlignment(.center)
         }

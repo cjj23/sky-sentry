@@ -20,7 +20,7 @@ struct WatchContentView: View {
                 statusBlock(summary)
                 armingBlock
                 Toggle("Haptics", isOn: $model.hapticsEnabled)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(.annunciatorDetail(12, weight: .semibold))
             }
             .padding(.horizontal, 6)
         }
@@ -34,21 +34,22 @@ struct WatchContentView: View {
     private func statusBlock(_ summary: TrafficSummary) -> some View {
         VStack(spacing: 4) {
             Text(headline(for: summary))
-                .font(.system(size: 20, weight: .black, design: .rounded))
+                .font(.annunciator(20))
+                .tracking(Font.annunciatorTracking(20))
                 .minimumScaleFactor(0.5)
                 .lineLimit(1)
 
             if summary.isAlerting {
                 Text(summary.side == .left ? "◀ LEFT"
                      : summary.side == .right ? "RIGHT ▶" : "DIRECTION UNKNOWN")
-                    .font(.system(size: 15, weight: .heavy, design: .rounded))
+                    .font(.annunciatorDetail(15, weight: .heavy))
 
                 Text(detail(for: summary))
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .font(.annunciatorDetail(13, weight: .semibold))
                     .opacity(0.9)
             } else {
                 Text(subtitle(for: summary))
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(.annunciatorDetail(12, weight: .semibold))
                     .multilineTextAlignment(.center)
                     .opacity(0.85)
             }
@@ -66,7 +67,7 @@ struct WatchContentView: View {
             } label: {
                 Label(model.monitoring.isArmed ? "Stop monitoring" : "Start monitoring",
                       systemImage: model.monitoring.isArmed ? "stop.circle.fill" : "bolt.horizontal.circle")
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .font(.annunciatorDetail(14))
                     .frame(maxWidth: .infinity)
             }
             .tint(model.monitoring.isArmed ? .red : .accentColor)
@@ -74,7 +75,7 @@ struct WatchContentView: View {
             // The limitation stated plainly rather than hidden: without this the
             // watch stops alerting the moment the screen goes off.
             Text(armingFootnote)
-                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .font(.annunciatorDetail(10, weight: .medium))
                 .multilineTextAlignment(.center)
                 .opacity(0.8)
         }

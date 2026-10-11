@@ -292,7 +292,7 @@ final class TrafficModel {
                 continue
             }
 
-            guard range <= config.displayRangeNM else {
+            guard range <= config.plotRangeNM else {
                 dispositions.append(TargetDisposition(target: target, rangeNM: range, outcome: .beyondRange))
                 continue
             }

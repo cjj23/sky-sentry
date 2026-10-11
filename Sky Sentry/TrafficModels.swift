@@ -30,6 +30,10 @@ struct AlertConfig {
 
     var profile: AlertProfile { profileKind.profile }
 
+    /// How far out targets are kept at all. Beyond the selected range they are
+    /// only drawn if they fall in the extra space a forward bias opens up.
+    var plotRangeNM: Double { displayRangeNM * forwardBias.plotRangeMultiplier }
+
     /// Ring radii, as fractions of the selected range so the picture keeps its
     /// shape whichever range is chosen.
     var innerRingNM: Double { displayRangeNM * 0.2 }
@@ -115,12 +119,19 @@ struct AlertConfig {
 /// Where ownship sits on the display.
 ///
 /// Moving it down devotes more of the screen to what is ahead, which is where
-/// the threats are for a faster aircraft. The scale stays uniform in every
-/// direction — the picture is never stretched — so what actually changes is
-/// that the same range is drawn larger ahead, at the cost of seeing less to the
-/// sides and behind. Traffic pushed off the edge is not dropped: it is shown as
-/// an arrowhead at the edge on the correct relative bearing, as a TCAS display
-/// does with its half symbols.
+/// the threats are for a faster aircraft.
+///
+/// Crucially this does NOT zoom. The scale is identical in every direction and
+/// identical to the centred case, so the rings are the same size and the
+/// picture is not magnified. What changes is how far the screen reaches: with
+/// ownship low, the space above covers far more distance than the space below,
+/// so traffic is shown FURTHER AHEAD than the selected range while the sides
+/// keep exactly the coverage they had.
+///
+/// An earlier attempt derived the magnification from the offset, which on a
+/// phone could only zoom in and cut the sides off — the display there is
+/// limited by its width, so there is no spare room ahead to move into until
+/// you stop magnifying.
 enum ForwardBias: String, CaseIterable, Identifiable, Sendable {
     case centred
     case slight
@@ -136,25 +147,31 @@ enum ForwardBias: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    /// How much bigger the picture is drawn than the largest circle that fits
-    /// whole. Everything follows from this: the bigger the picture, the lower
-    /// ownship has to sit for the full range to still be visible ahead, and the
-    /// more is lost to the sides and behind. Setting the offset directly and
-    /// deriving the size from it — the obvious way round — zooms in violently
-    /// and strands traffic off the edges.
-    var zoom: Double {
+    /// How far down the display ownship sits, as a fraction of its height.
+    var ownshipFraction: Double {
+        switch self {
+        case .centred: return 0.50
+        case .slight:  return 0.62
+        case .strong:  return 0.75
+        }
+    }
+
+    /// How far out to keep targets, as a multiple of the selected range, so
+    /// there is something to put in the extra space ahead. Beyond the ring they
+    /// are drawn as secondary marks rather than full arrows.
+    var plotRangeMultiplier: Double {
         switch self {
         case .centred: return 1.0
-        case .slight:  return 1.50
-        case .strong:  return 1.8
+        case .slight:  return 1.8
+        case .strong:  return 2.2
         }
     }
 
     var detail: String {
         switch self {
         case .centred: return "Equal all round"
-        case .slight:  return "More ahead, about 7 nm to the sides"
-        case .strong:  return "Most ahead, about 5 nm to the sides"
+        case .slight:  return "Further ahead, same to the sides"
+        case .strong:  return "Much further ahead, less behind"
         }
     }
 }
@@ -249,7 +266,7 @@ enum ThreatLevel: Int, Comparable, Sendable {
                          verticalClosureFPM: Double?,
                          level: SensitivityLevel,
                          config: AlertConfig) -> ThreatLevel {
-        guard rangeNM <= config.displayRangeNM else { return .clear }
+        guard rangeNM <= config.plotRangeNM else { return .clear }
 
         let separation = relativeAltitudeFeet.map(Double.init)
         if AlertRule.isTriggered(rangeNM: rangeNM, closureKnots: closureKnots,

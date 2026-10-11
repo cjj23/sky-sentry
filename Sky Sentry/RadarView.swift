@@ -87,19 +87,14 @@ struct RadarView: View {
         let centre: CGPoint
         let maxRadius: CGFloat
 
-        // The largest circle that fits whole, which is what "centred" draws.
-        let fittedRadius = min(size.width, size.height) / 2 - edgeInset
-        maxRadius = fittedRadius * bias.zoom
+        // The scale never changes: the outer ring is always the largest circle
+        // that would fit whole, whatever the bias. Nothing is magnified.
+        maxRadius = min(size.width, size.height) / 2 - edgeInset
 
-        // Ownship sits just far enough down that the full range is still
-        // visible ahead — no further. Never above the middle, and never so low
-        // that nothing is left behind. The scale stays uniform in every
-        // direction, so the rings are true circles; they simply run off the
-        // sides and the bottom, and traffic out there is drawn at the edge.
-        let forwardFit = maxRadius + edgeInset
-        let lowestSensible = size.height * 0.72
-        let y = min(max(size.height / 2, forwardFit), lowestSensible)
-        centre = CGPoint(x: size.width / 2, y: y)
+        // Ownship simply moves down. Because the scale is fixed, the space
+        // above now reaches further in nautical miles than the space below —
+        // which is the whole point: more distance ahead, the sides unchanged.
+        centre = CGPoint(x: size.width / 2, y: size.height * bias.ownshipFraction)
 
         // Below this there is not enough room for the picture to mean anything.
         guard maxRadius > 26 else { return }
@@ -145,6 +140,36 @@ struct RadarView: View {
                           placedLabels: &placedLabels)
             }
         }
+    }
+
+    /// Traffic beyond the selected range, in the extra space ahead. A hollow
+    /// chevron at its true position — present, but visibly secondary to the
+    /// ranged picture inside the ring.
+    private func drawDistantMark(_ context: inout GraphicsContext, at point: CGPoint,
+                                 ux: CGFloat, uy: CGFloat, scale: CGFloat) {
+        let length = 15 * scale
+        let halfWidth = 10 * scale
+        let px = -uy, py = ux
+
+        var path = Path()
+        path.move(to: CGPoint(x: point.x + ux * length, y: point.y + uy * length))
+        path.addLine(to: CGPoint(x: point.x + px * halfWidth, y: point.y + py * halfWidth))
+        path.addLine(to: CGPoint(x: point.x - px * halfWidth, y: point.y - py * halfWidth))
+        path.closeSubpath()
+
+        context.stroke(path, with: .color(palette.inkOutline),
+                       style: StrokeStyle(lineWidth: 3.5 * scale, lineJoin: .round))
+        context.stroke(path, with: .color(palette.ink.opacity(0.75)),
+                       style: StrokeStyle(lineWidth: 2 * scale, lineJoin: .round))
+    }
+
+    private func drawDistantLabel(_ context: inout GraphicsContext, text: String,
+                                  at point: CGPoint, scale: CGFloat) {
+        let resolved = Text(text).font(.trafficLabel(max(10, 12 * scale)))
+        let shadow = context.resolve(resolved.foregroundStyle(palette.inkOutline))
+        context.draw(shadow, at: CGPoint(x: point.x + 1, y: point.y + 1), anchor: .center)
+        let body = context.resolve(resolved.foregroundStyle(palette.ink.opacity(0.8)))
+        context.draw(body, at: point, anchor: .center)
     }
 
     /// How far the view's edge is from a point, along a direction. Used to pin
@@ -198,9 +223,8 @@ struct RadarView: View {
             CGPoint(x: centre.x + radius + offset * 1.3, y: centre.y),
             CGPoint(x: centre.x - radius - offset * 1.3, y: centre.y),
         ]
-        let anchor = candidates.first { candidate in
-            placedLabels.allSatisfy { hypot($0.x - candidate.x, $0.y - candidate.y) > 52 * scale }
-        } ?? candidates[0]
+        let anchor = candidates.first { isClear($0, of: placedLabels, scale: scale) }
+            ?? candidates[0]
 
         placedLabels.append(anchor)
         drawLabel(&context, solution: solution, at: anchor, scale: scale)
@@ -287,17 +311,30 @@ struct RadarView: View {
                     y: centre.y + uy * radius + py * across)
         }
 
-        // With a forward bias the rim runs off the screen to the sides and
-        // behind, so the head sits at whichever comes first: the rim, or the
-        // edge of the view. The tail tip still lands on the true range ring, so
-        // distance is never misrepresented — only the pointer is shortened.
         let edge = distanceToEdge(from: centre, ux: ux, uy: uy, in: size)
-        let headRadius = min(maxRadius, edge)
         let ringRadius = maxRadius * CGFloat(solution.rangeNM / config.displayRangeNM)
 
-        // Beyond the edge entirely: show the head alone at the correct relative
-        // bearing, as a TCAS display does with its half symbols, so nothing is
-        // silently dropped just because it will not fit.
+        // Further out than the selected range, but inside the extra space a
+        // forward bias opens up. Drawn as a small outline at its true position
+        // rather than a full arrow: it is awareness of something out there, not
+        // part of the ranged picture, and it should not read as urgently as
+        // traffic inside the ring.
+        if ringRadius > maxRadius {
+            guard ringRadius < edge else { return }
+            drawDistantMark(&context, at: point(ringRadius), ux: ux, uy: uy, scale: scale)
+            guard mayLabel, let altitude = solution.altitudeLabel else { return }
+            let anchor = clamped(point(ringRadius, across: shaftWidth + 20 * scale),
+                                 in: size, scale: scale)
+            placedLabels.append(anchor)
+            drawDistantLabel(&context, text: altitude, at: anchor, scale: scale)
+            return
+        }
+
+        // Within the ring. The head sits at whichever comes first: the rim, or
+        // the edge of the view — with a bias the rim runs off the bottom. The
+        // tail still lands on the true range, so distance is never
+        // misrepresented; only the pointer is shortened.
+        let headRadius = min(maxRadius, edge)
         let isOffScreen = ringRadius > edge
 
         let shoulder = headRadius - headLength
@@ -352,13 +389,24 @@ struct RadarView: View {
         let offsets: [CGFloat] = [shaftWidth + 20 * scale, -(shaftWidth + 20 * scale),
                                   shaftWidth + 62 * scale, -(shaftWidth + 62 * scale)]
         let candidates = offsets.map { point(labelRadius, across: $0) }
-        let anchor = candidates.first { candidate in
-            placedLabels.allSatisfy { hypot($0.x - candidate.x, $0.y - candidate.y) > 52 * scale }
-        } ?? candidates[0]
+        let anchor = candidates.first { isClear($0, of: placedLabels, scale: scale) }
+            ?? candidates[0]
 
         placedLabels.append(anchor)
         drawLabel(&context, solution: solution, at: clamped(anchor, in: size, scale: scale),
                   scale: scale)
+    }
+
+    /// Labels are far wider than they are tall, so a plain radial distance test
+    /// lets two of them sit side by side and overlap. This checks the boxes
+    /// they actually occupy.
+    private func isClear(_ candidate: CGPoint, of placed: [CGPoint], scale: CGFloat) -> Bool {
+        let halfWidth = 46 * scale
+        let halfHeight = 26 * scale
+        return placed.allSatisfy { existing in
+            abs(existing.x - candidate.x) > halfWidth
+                || abs(existing.y - candidate.y) > halfHeight
+        }
     }
 
     /// Keeps a label inside the view. With a forward bias the arrowheads sit on

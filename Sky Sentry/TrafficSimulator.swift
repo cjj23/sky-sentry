@@ -89,6 +89,12 @@ final class TrafficSimulator {
                    initialBearing: 225, track: 45, speedKnots: 165,
                    altitude: 3400, verticalSpeed: 800),
 
+            // Well ahead and beyond the 10 nm ring — only visible when a
+            // forward bias opens up the space in front.
+            Script(address: 0x409911, callsign: "GFAR1", initialRangeNM: 15.0,
+                   initialBearing: 50, track: 230, speedKnots: 130,
+                   altitude: 3200, verticalSpeed: 0),
+
             // Airliner in the flight levels — well within 10 nm laterally, but it
             // should be filtered out by the vertical limit rather than cluttering.
             Script(address: 0x4004F2, callsign: "BAW23G", initialRangeNM: 6.0,

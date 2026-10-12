@@ -29,10 +29,7 @@ struct ContentView: View {
                 }
             }
         }
-        .onAppear {
-            subscriptions.start()
-            allowSmallWindows()
-        }
+        .onAppear { subscriptions.start() }
         .onDisappear { subscriptions.stop() }
     }
 
@@ -84,20 +81,17 @@ struct ContentView: View {
 
     // MARK: - Window sizing
 
-    /// iPadOS sizes a window no smaller than the scene's stated minimum, and the
-    /// default is far larger than this display needs. A traffic alerter wants to
-    /// sit in a corner of the screen, not take a quarter of it, so we ask for a
-    /// much smaller floor.
+    /// iPadOS enforces its own minimum window size and there is no way to go
+    /// below it. `UIWindowScene.sizeRestrictions.minimumSize` defaults to
+    /// 0x0 — no app-imposed floor — so setting it can only ever make windows
+    /// BIGGER. An earlier attempt set 180x180 here, which raised our own floor
+    /// rather than lowering the system's; the scene accepted the value and
+    /// reported it back, and nothing got smaller.
     ///
-    /// The system treats this as a preference rather than a guarantee, so the
-    /// result is best-effort.
-    private func allowSmallWindows() {
-        guard UIDevice.current.userInterfaceIdiom == .pad else { return }
-        for scene in UIApplication.shared.connectedScenes {
-            guard let windowScene = scene as? UIWindowScene else { continue }
-            windowScene.sizeRestrictions?.minimumSize = CGSize(width: 180, height: 180)
-        }
-    }
+    /// Nothing to do, then, except make the app work at whatever size the
+    /// system permits — which is what the compact layout is for. On a small
+    /// iPad the system minimum is a larger share of the screen, so the window
+    /// looks proportionally bigger there even though it is the same in points.
 
     // MARK: - Header
 

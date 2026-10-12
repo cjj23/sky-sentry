@@ -7,10 +7,19 @@ import SwiftUI
 
 struct PaywallView: View {
     @Bindable var subscriptions: SubscriptionManager
+    @Environment(\.dismiss) private var dismiss
     @State private var showingHelp = false
 
     var body: some View {
         VStack(spacing: 0) {
+            HStack {
+                Spacer()
+                Button("Not now") { dismiss() }
+                    .font(.subheadline)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 14)
+            }
+
             ScrollView {
                 VStack(spacing: 22) {
                     Image(systemName: "dot.radiowaves.up.forward")
@@ -45,6 +54,11 @@ struct PaywallView: View {
             purchaseBar
         }
         .sheet(isPresented: $showingHelp) { HelpView() }
+        // Close as soon as it is bought, so the screen they were heading for is
+        // one tap away rather than behind a paywall they have already paid.
+        .onChange(of: subscriptions.isEntitled) { _, entitled in
+            if entitled { dismiss() }
+        }
     }
 
     private func feature(_ symbol: String, _ title: String, _ detail: String) -> some View {

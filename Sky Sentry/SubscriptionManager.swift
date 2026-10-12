@@ -9,10 +9,18 @@
 //  seasonal, so a monthly-only plan invites subscribing in April and cancelling
 //  in October; the competition (SafeSky, SkyDemon, PilotAware) all sell yearly.
 //
-//  SAFETY RULE: access is evaluated at launch and then held for the lifetime of
-//  the launch. A subscription that lapses, or a StoreKit call that fails while
-//  airborne with no signal, must never cause the traffic display to disappear
-//  in flight. Billing problems get resolved on the ground, not at 2,000 feet.
+//  The traffic display does NOT depend on any of this — it is free, and nothing
+//  here is consulted before drawing it. The subscription buys the customisation.
+//  That is what makes it safe to deny access when entitlement cannot be proved:
+//  the worst case is a pilot who cannot change the display range, not one who
+//  loses their traffic picture over a billing problem.
+//
+//  Entitlement is still held for the lifetime of a launch once granted, so a
+//  renewal failing mid-flight cannot pull settings out from under someone.
+//
+//  Note that being offline is NOT a reason to grant access: currentEntitlements
+//  reads the local receipt and works perfectly well in the air. Only fetching
+//  prices needs the network, and that matters solely for showing the paywall.
 //
 
 import Foundation
@@ -36,6 +44,10 @@ final class SubscriptionManager {
     }
 
     private(set) var access: Access = .checking
+
+    /// True once the customisation is unlocked. Note the traffic display never
+    /// consults this: it is free, deliberately.
+    var isEntitled: Bool { access == .entitled }
     private(set) var products: [Plan: Product] = [:]
     private(set) var lastError: String?
     private(set) var purchasingPlan: Plan?
@@ -70,15 +82,12 @@ final class SubscriptionManager {
         Task { await refresh() }
 
         // Watchdog. StoreKit can hang indefinitely when the App Store is
-        // unreachable — which is the normal state in the air — and the fail-open
-        // in refresh() only helps once the await returns. Without this the app
-        // sits on a spinner for ever and never shows any traffic at all.
+        // unreachable, and nothing should sit on "checking" for ever. Resolving
+        // to not-entitled is safe now that only the customisation depends on it.
         Task { [weak self] in
             try? await Task.sleep(nanoseconds: 5_000_000_000)
             guard let self, self.access == .checking else { return }
-            self.isUnverified = true
-            self.grantedThisLaunch = true
-            self.access = .entitled
+            self.access = .notEntitled
         }
     }
 
@@ -113,20 +122,8 @@ final class SubscriptionManager {
 
         if entitled { grantedThisLaunch = true }
 
-        if entitled || grantedThisLaunch {
-            // Once granted, stay granted for this launch — see the safety rule above.
-            access = .entitled
-        } else if products.isEmpty {
-            // We could not even find out what is for sale: either the products
-            // are not configured in App Store Connect yet, or the App Store is
-            // unreachable — which is the normal state airborne. Fail open. A
-            // billing system that cannot reach a server must never be the reason
-            // a pilot loses their traffic display.
-            isUnverified = true
-            access = .entitled
-        } else {
-            access = .notEntitled
-        }
+        // Once granted, stay granted for this launch.
+        access = (entitled || grantedThisLaunch) ? .entitled : .notEntitled
     }
 
     // MARK: - Purchasing

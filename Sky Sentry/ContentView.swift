@@ -9,24 +9,20 @@ struct ContentView: View {
     @State private var model = TrafficModel()
     @State private var subscriptions = SubscriptionManager()
     @State private var showingHelp = false
-    @State private var showingDiagnostics = false
     @State private var showingSettings = false
     @AppStorage("hasAcceptedSafetyBriefing") private var hasAcceptedSafety = false
     @AppStorage("autoStartRecording") private var autoStartRecording = false
 
     var body: some View {
         Group {
+            // The traffic display itself is never gated. A billing problem must
+            // not be able to take a pilot's traffic picture away, and charging
+            // for the thing most likely to prevent a collision is the wrong
+            // trade in every sense. The subscription buys the customisation.
             if !hasAcceptedSafety {
                 SafetyAcknowledgementView(accepted: $hasAcceptedSafety)
             } else {
-                switch subscriptions.access {
-                case .checking:
-                    ProgressView("Checking subscription…")
-                case .notEntitled:
-                    PaywallView(subscriptions: subscriptions)
-                case .entitled:
-                    trafficDisplay
-                }
+                trafficDisplay
             }
         }
         .onAppear { subscriptions.start() }
@@ -75,8 +71,9 @@ struct ContentView: View {
             UIApplication.shared.isIdleTimerDisabled = false
         }
         .sheet(isPresented: $showingHelp) { HelpView() }
-        .sheet(isPresented: $showingDiagnostics) { DiagnosticsView(model: model) }
-        .sheet(isPresented: $showingSettings) { SettingsView(model: model) }
+        .sheet(isPresented: $showingSettings) {
+            SettingsView(model: model, subscriptions: subscriptions)
+        }
     }
 
     // MARK: - Window sizing
@@ -179,23 +176,18 @@ struct ContentView: View {
                     .font(.annunciatorDetail(11, weight: .semibold))
                     .foregroundStyle(palette.ink.opacity(0.85))
 
-                Button { showingSettings = true } label: {
-                    Image(systemName: "slider.horizontal.3")
-                        .font(.system(size: 14, weight: .semibold))
-                }
-                .foregroundStyle(palette.ink.opacity(0.85))
-
-                Button { showingDiagnostics = true } label: {
-                    Image(systemName: "waveform.path.ecg")
-                        .font(.system(size: 14, weight: .semibold))
-                }
-                .foregroundStyle(palette.ink.opacity(0.85))
-
                 Button { showingHelp = true } label: {
                     Image(systemName: "questionmark.circle")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 17, weight: .semibold))
                 }
-                .foregroundStyle(palette.ink.opacity(0.85))
+                .foregroundStyle(palette.ink.opacity(0.8))
+
+                Button { showingSettings = true } label: {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 22, weight: .semibold))
+                        .frame(width: 34, height: 34)
+                }
+                .foregroundStyle(palette.ink)
             }
 
             Text(statusWord)
@@ -266,15 +258,6 @@ struct ContentView: View {
     @ViewBuilder
     private func footer(_ palette: Palette) -> some View {
         VStack(spacing: 8) {
-            Picker("Source", selection: Binding(
-                get: { model.source },
-                set: { model.source = $0 }
-            )) {
-                Text("Test feed").tag(TrafficModel.Source.simulator)
-                Text("SkyEcho").tag(TrafficModel.Source.live)
-            }
-            .pickerStyle(.segmented)
-
             Text(AppInfo.oneLineDisclaimer)
                 .font(.annunciatorDetail(10, weight: .medium))
                 .foregroundStyle(palette.ink.opacity(0.7))

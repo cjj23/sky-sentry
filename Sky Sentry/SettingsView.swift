@@ -19,25 +19,110 @@ import SwiftUI
 
 struct SettingsView: View {
     @Bindable var model: TrafficModel
+    @Bindable var subscriptions: SubscriptionManager
     @Environment(\.dismiss) private var dismiss
+    @State private var showingPaywall = false
+    @State private var showingDiagnostics = false
+
+    private var isLocked: Bool { !subscriptions.isEntitled }
 
     var body: some View {
         NavigationStack {
             List {
-                rangeSection
-                forwardBiasSection
-                altitudeSection
-                profileSection
+                sourceSection
+                if isLocked { unlockSection }
+
+                // Locked controls are shown rather than hidden: a greyed-out
+                // setting explains what a subscription buys far better than an
+                // absence does, and the thresholds in force stay readable
+                // either way.
+                Group {
+                    rangeSection
+                    forwardBiasSection
+                    altitudeSection
+                    profileSection
+                }
+                .disabled(isLocked)
+                .opacity(isLocked ? 0.45 : 1)
+
                 activeThresholdsSection
+                diagnosticsSection
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("Display & Alerts")
+            .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
             }
+            .sheet(isPresented: $showingPaywall) {
+                PaywallView(subscriptions: subscriptions)
+            }
+            .sheet(isPresented: $showingDiagnostics) {
+                DiagnosticsView(model: model)
+            }
+        }
+    }
+
+    // MARK: - Source
+
+    /// Not premium: choosing which receiver to listen to is basic operation,
+    /// not customisation. The test feed lives here rather than on the main
+    /// screen — simulated aircraft should not sit as an equally weighted choice
+    /// underneath a live traffic display.
+    private var sourceSection: some View {
+        Section {
+            Picker("Traffic source", selection: Binding(
+                get: { model.source },
+                set: { model.source = $0 }
+            )) {
+                Text("SkyEcho").tag(TrafficModel.Source.live)
+                Text("Test feed").tag(TrafficModel.Source.simulator)
+            }
+            .pickerStyle(.segmented)
+        } header: {
+            Text("Traffic source")
+        } footer: {
+            Text(model.source == .simulator
+                 ? "The test feed is INVENTED traffic for trying the app out on "
+                 + "the ground. It is not real and tells you nothing about the "
+                 + "airspace around you."
+                 : "Live traffic from the receiver on the SkyEcho's Wi-Fi network.")
+        }
+    }
+
+    private var unlockSection: some View {
+        Section {
+            Button {
+                showingPaywall = true
+            } label: {
+                Label("Unlock customisation", systemImage: "lock.open")
+                    .font(.headline)
+            }
+        } footer: {
+            Text("The traffic display, converging-traffic detection and the "
+                 + "safety information are free. A subscription adds the "
+                 + "settings below, and flight recording.")
+        }
+    }
+
+    private var diagnosticsSection: some View {
+        Section {
+            Button {
+                if isLocked { showingPaywall = true } else { showingDiagnostics = true }
+            } label: {
+                HStack {
+                    Label("Flight recording & diagnostics", systemImage: "waveform.path.ecg")
+                    Spacer()
+                    if isLocked {
+                        Image(systemName: "lock.fill").foregroundStyle(.secondary)
+                    }
+                }
+            }
+        } footer: {
+            Text("Records every aircraft heard and what the app did with it, for "
+                 + "working out afterwards what your receiver can and cannot see.")
         }
     }
 

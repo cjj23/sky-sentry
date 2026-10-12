@@ -102,6 +102,8 @@ struct RadarView: View {
         let scale = min(1.0, max(0.45, maxRadius / nominalRadius))
 
         drawRings(&context, centre: centre, maxRadius: maxRadius, scale: scale)
+        drawForwardArcs(&context, centre: centre, maxRadius: maxRadius,
+                        size: size, scale: scale)
         drawBearingTicks(&context, centre: centre, maxRadius: maxRadius, scale: scale)
         drawOwnship(&context, centre: centre, scale: scale)
 
@@ -255,6 +257,40 @@ struct RadarView: View {
                     .foregroundStyle(palette.ring)
             )
             context.draw(label, at: CGPoint(x: centre.x, y: centre.y + radius - 10 * scale),
+                         anchor: .center)
+        }
+    }
+
+    /// With a forward bias the screen reaches well past the outer ring in
+    /// front, and without a reference out there the extra space has no scale.
+    /// These are drawn only across the forward half, and deliberately fainter
+    /// than the main rings: they are context for the occasional distant
+    /// contact, not part of the ranged picture.
+    private func drawForwardArcs(_ context: inout GraphicsContext, centre: CGPoint,
+                                 maxRadius: CGFloat, size: CGSize, scale: CGFloat) {
+        guard config.forwardBias != .centred else { return }
+
+        // Multiples of the selected range, so they stay sensible at 5 or 20 nm
+        // just as they do at 10.
+        for multiple in [2.0, 3.0] {
+            let radius = maxRadius * multiple
+            // Skip one that would be entirely off the top of the view.
+            guard centre.y - radius > edgeInset else { continue }
+
+            var path = Path()
+            path.addArc(center: centre, radius: radius,
+                        startAngle: .degrees(180), endAngle: .degrees(360),
+                        clockwise: false)
+            context.stroke(path, with: .color(palette.ring.opacity(0.45)),
+                           style: StrokeStyle(lineWidth: 1.5 * scale,
+                                              dash: [2 * scale, 7 * scale]))
+
+            let label = context.resolve(
+                Text("\(Int(config.displayRangeNM * multiple))")
+                    .font(.annunciatorDetail(11 * scale, weight: .semibold))
+                    .foregroundStyle(palette.ring.opacity(0.5))
+            )
+            context.draw(label, at: CGPoint(x: centre.x, y: centre.y - radius + 11 * scale),
                          anchor: .center)
         }
     }

@@ -148,12 +148,10 @@
 				72630F11303B9F31006DFD66 /* Sources */,
 				72630F12303B9F31006DFD66 /* Frameworks */,
 				72630F13303B9F31006DFD66 /* Resources */,
-				7A1A000A303B9F31006DFD66 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				7A1A000B303B9F31006DFD66 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				72630F17303B9F31006DFD66 /* Sky Sentry */,

@@ -281,14 +281,16 @@ struct RadarView: View {
             path.addArc(center: centre, radius: radius,
                         startAngle: .degrees(180), endAngle: .degrees(360),
                         clockwise: false)
-            context.stroke(path, with: .color(palette.ring.opacity(0.45)),
-                           style: StrokeStyle(lineWidth: 1.5 * scale,
-                                              dash: [2 * scale, 7 * scale]))
+            // Same colour as the main rings, so they read as part of the same
+            // scale. The dotted stroke is what distinguishes them.
+            context.stroke(path, with: .color(palette.ring),
+                           style: StrokeStyle(lineWidth: 2 * scale,
+                                              dash: [2.5 * scale, 7 * scale]))
 
             let label = context.resolve(
                 Text("\(Int(config.displayRangeNM * multiple))")
                     .font(.annunciatorDetail(11 * scale, weight: .semibold))
-                    .foregroundStyle(palette.ring.opacity(0.5))
+                    .foregroundStyle(palette.ring)
             )
             context.draw(label, at: CGPoint(x: centre.x, y: centre.y - radius + 11 * scale),
                          anchor: .center)

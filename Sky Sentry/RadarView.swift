@@ -260,10 +260,17 @@ struct RadarView: View {
             // the outer ring runs off the bottom, taking its label with it, so
             // fall back to the forward side where there is room.
             var labelY = centre.y + radius - 10 * scale
+            var labelX = centre.x
+
+            // With a forward bias the outer ring runs off the bottom, taking its
+            // label with it, so fall back to the forward side. Only that one is
+            // nudged off the vertical, because only up there does it land on a
+            // bearing tick; the inner labels are fine where they sit.
             if labelY > size.height - edgeInset {
                 labelY = centre.y - radius + 12 * scale
+                labelX = centre.x + 25 * scale
             }
-            context.draw(label, at: CGPoint(x: centre.x, y: labelY), anchor: .center)
+            context.draw(label, at: CGPoint(x: labelX, y: labelY), anchor: .center)
         }
     }
 

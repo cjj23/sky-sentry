@@ -101,7 +101,7 @@ struct RadarView: View {
 
         let scale = min(1.0, max(0.45, maxRadius / nominalRadius))
 
-        drawRings(&context, centre: centre, maxRadius: maxRadius, scale: scale)
+        drawRings(&context, centre: centre, maxRadius: maxRadius, size: size, scale: scale)
         drawForwardArcs(&context, centre: centre, maxRadius: maxRadius,
                         size: size, scale: scale)
         drawBearingTicks(&context, centre: centre, maxRadius: maxRadius, scale: scale)
@@ -235,7 +235,7 @@ struct RadarView: View {
     // MARK: Rings
 
     private func drawRings(_ context: inout GraphicsContext, centre: CGPoint,
-                           maxRadius: CGFloat, scale: CGFloat) {
+                           maxRadius: CGFloat, size: CGSize, scale: CGFloat) {
         let rings: [(range: Double, dashed: Bool)] = [
             (config.innerRingNM, true),
             (config.middleRingNM, true),
@@ -252,12 +252,18 @@ struct RadarView: View {
 
             // Range label sits just below the ring on the vertical, clear of most arrows.
             let label = context.resolve(
-                Text("\(Int(ring.range))")
+                Text("\(Int(ring.range)) nm")
                     .font(.annunciatorDetail(12 * scale, weight: .semibold))
                     .foregroundStyle(palette.ring)
             )
-            context.draw(label, at: CGPoint(x: centre.x, y: centre.y + radius - 10 * scale),
-                         anchor: .center)
+            // Normally below centre, clear of most arrows. With a forward bias
+            // the outer ring runs off the bottom, taking its label with it, so
+            // fall back to the forward side where there is room.
+            var labelY = centre.y + radius - 10 * scale
+            if labelY > size.height - edgeInset {
+                labelY = centre.y - radius + 12 * scale
+            }
+            context.draw(label, at: CGPoint(x: centre.x, y: labelY), anchor: .center)
         }
     }
 
@@ -288,7 +294,7 @@ struct RadarView: View {
                                               dash: [2.5 * scale, 7 * scale]))
 
             let label = context.resolve(
-                Text("\(Int(config.displayRangeNM * multiple))")
+                Text("\(Int(config.displayRangeNM * multiple)) nm")
                     .font(.annunciatorDetail(11 * scale, weight: .semibold))
                     .foregroundStyle(palette.ring)
             )

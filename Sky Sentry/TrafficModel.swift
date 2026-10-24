@@ -56,6 +56,11 @@ final class TrafficModel {
         }
     }
 
+    /// Nothing has arrived since this source was selected — as distinct from
+    /// having had a picture and lost it, which is a different situation and
+    /// deserves a different screen.
+    var hasNeverReceivedData: Bool { lastPacket == nil }
+
     /// True when we have heard nothing at all recently.
     var isStale: Bool {
         guard let lastPacket else { return true }

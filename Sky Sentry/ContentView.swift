@@ -48,8 +48,20 @@ struct ContentView: View {
 
                 VStack(spacing: 0) {
                     header(palette, compact: compact)
-                    RadarView(solutions: model.solutions, config: model.config, palette: palette)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    // Nothing has ever arrived from this source: show how to get
+                    // going rather than an empty picture. Losing a signal that
+                    // was working is a different case and keeps the display —
+                    // in the air you want the picture, not instructions.
+                    if model.hasNeverReceivedData && model.isSignalLost {
+                        gettingStarted(palette, compact: compact)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        RadarView(solutions: model.solutions, config: model.config,
+                                  palette: palette)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+
                     if !compact { footer(palette) }
                 }
             }
@@ -73,6 +85,69 @@ struct ContentView: View {
         .sheet(isPresented: $showingHelp) { HelpView() }
         .sheet(isPresented: $showingSettings) {
             SettingsView(model: model, subscriptions: subscriptions)
+        }
+    }
+
+    // MARK: - Getting started
+
+    /// Shown only before anything has ever been received. Doubles as the route
+    /// an App Store reviewer needs: they will not have a SkyEcho, and an app
+    /// that looks blank to them gets rejected as incomplete.
+    @ViewBuilder
+    private func gettingStarted(_ palette: Palette, compact: Bool) -> some View {
+        VStack(spacing: compact ? 10 : 18) {
+            Spacer(minLength: 0)
+
+            Image(systemName: "antenna.radiowaves.left.and.right.slash")
+                .font(.system(size: compact ? 30 : 44, weight: .regular))
+                .foregroundStyle(palette.ink.opacity(0.8))
+
+            if model.source == .live {
+                Text("No receiver connected")
+                    .font(.annunciator(compact ? 16 : 21))
+                    .tracking(Font.annunciatorTracking(compact ? 16 : 21))
+
+                VStack(alignment: .leading, spacing: 6) {
+                    step(1, "Power on your SkyEcho and let it get a GPS fix.")
+                    step(2, "In iPhone Settings, join the SkyEcho's Wi-Fi network.")
+                    step(3, "Come back here — traffic appears within seconds.")
+                }
+                .foregroundStyle(palette.ink.opacity(0.9))
+                .padding(.horizontal, 8)
+
+                Button {
+                    model.source = .simulator
+                } label: {
+                    Text("No receiver? Try the test feed")
+                        .font(.annunciatorDetail(13))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 9)
+                        .background(Capsule().fill(palette.ink.opacity(0.18)))
+                }
+                .foregroundStyle(palette.ink)
+            } else {
+                Text("Starting test feed…")
+                    .font(.annunciator(compact ? 16 : 21))
+                    .tracking(Font.annunciatorTracking(compact ? 16 : 21))
+                Text("Simulated aircraft, for trying the app out on the ground.")
+                    .font(.annunciatorDetail(12, weight: .medium))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(palette.ink.opacity(0.85))
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 22)
+    }
+
+    private func step(_ number: Int, _ text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text("\(number)")
+                .font(.annunciatorDetail(12, weight: .heavy))
+                .frame(width: 18)
+            Text(text)
+                .font(.annunciatorDetail(13, weight: .medium))
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

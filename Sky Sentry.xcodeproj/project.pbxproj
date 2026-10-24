@@ -493,6 +493,7 @@
 				DEVELOPMENT_TEAM = TCF8VJ9Y69;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				CODE_SIGN_ENTITLEMENTS = "EyesOut.entitlements";
 				INFOPLIST_FILE = "EyesOut-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Eyes Out";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
@@ -531,6 +532,7 @@
 				DEVELOPMENT_TEAM = TCF8VJ9Y69;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				CODE_SIGN_ENTITLEMENTS = "EyesOut.entitlements";
 				INFOPLIST_FILE = "EyesOut-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Eyes Out";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;

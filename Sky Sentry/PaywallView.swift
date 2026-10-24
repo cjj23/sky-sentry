@@ -159,11 +159,20 @@ struct PaywallView: View {
             }
             .font(.footnote)
 
-            Text("Renews monthly until cancelled. Cancel any time in Settings › "
-                 + "Apple Account › Subscriptions.")
+            Text("Each plan renews automatically at the price shown until "
+                 + "cancelled. Cancel any time in Settings › Apple Account › "
+                 + "Subscriptions.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+
+            // Required in the binary by guideline 3.1.2, not just in the App
+            // Store listing.
+            HStack(spacing: 18) {
+                Link("Terms of Use", destination: AppInfo.termsOfUseURL)
+                Link("Privacy Policy", destination: AppInfo.privacyPolicyURL)
+            }
+            .font(.caption2)
         }
         .padding(20)
         .background(.bar)

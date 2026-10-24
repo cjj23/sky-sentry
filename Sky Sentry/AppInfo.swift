@@ -21,6 +21,24 @@ enum AppInfo {
         return "\(version) (\(build))"
     }
 
+    // MARK: - Subscription links
+    //
+    // Guideline 3.1.2 requires an app selling an auto-renewing subscription to
+    // carry working links to its Terms of Use and Privacy Policy in the binary
+    // itself, not merely in the App Store listing. A missing link is one of the
+    // commonest rejections for subscription apps, and it is checked by a human.
+
+    /// Apple's standard EULA, which governs unless a custom one is supplied in
+    /// App Store Connect. Using it saves writing and hosting our own terms.
+    static let termsOfUseURL = URL(string:
+        "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
+
+    /// MUST be live before the build is submitted, and MUST be the same URL
+    /// given in App Store Connect under App Privacy. Serving the policy from
+    /// the project's own repository through GitHub Pages is enough.
+    static let privacyPolicyURL = URL(string:
+        "https://cjj23.github.io/sky-sentry/privacy.html")!
+
     // MARK: - Safety text
     //
     // The wording is deliberately about SCOPE rather than blanket exclusion.

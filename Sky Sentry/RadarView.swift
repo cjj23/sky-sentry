@@ -269,8 +269,24 @@ struct RadarView: View {
             if labelY > size.height - edgeInset {
                 labelY = centre.y - radius + 12 * scale
                 labelX = centre.x + 25 * scale
+            } else if arrowRunsThrough(ringRangeNM: ring.range) {
+                // Traffic astern puts a white arrow straight down the vertical,
+                // over the label. Step aside rather than letting the range be
+                // unreadable; nothing moves unless something is actually there.
+                labelX = centre.x + 30 * scale
             }
             context.draw(label, at: CGPoint(x: labelX, y: labelY), anchor: .center)
+        }
+    }
+
+    /// Whether any arrow is drawn over this ring's range label, which sits on
+    /// the vertical below ownship. An arrow's shaft runs from the target's own
+    /// range out to the rim, so anything roughly astern and no further out than
+    /// the ring covers that ring's label.
+    private func arrowRunsThrough(ringRangeNM: Double) -> Bool {
+        solutions.contains { solution in
+            guard let bearing = solution.relativeBearing else { return false }
+            return abs(bearing - 180) < 20 && solution.rangeNM <= ringRangeNM
         }
     }
 

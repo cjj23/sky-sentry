@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Receiving broadcast UDP has been gated since iOS 14. The SkyEcho sends
+	     GDL90 to the subnet broadcast address, so without this the app hears
+	     nothing at all. Apple granted the entitlement to this team in August
+	     2026 (request 5GMU78YCN3); it still has to be declared here to be
+	     signed into the binary. -->
+	<key>com.apple.developer.networking.multicast</key>
+	<true/>
+</dict>
+</plist>

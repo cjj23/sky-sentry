@@ -30,6 +30,7 @@ struct SettingsView: View {
         NavigationStack {
             List {
                 sourceSection
+                ownAircraftSection
                 if isLocked { unlockSection }
 
                 // Locked controls are shown rather than hidden: a greyed-out
@@ -89,6 +90,38 @@ struct SettingsView: View {
                  + "the ground. It is not real and tells you nothing about the "
                  + "airspace around you."
                  : "Live traffic from the receiver on the SkyEcho's Wi-Fi network.")
+        }
+    }
+
+    /// Free, and deliberately so. In an aircraft fitted with ADS-B Out the app
+    /// is not merely less useful without this, it is wrong — it alerts on its
+    /// own aircraft for the whole flight. Charging for correctness would be
+    /// charging for the app to work at all.
+    private var ownAircraftSection: some View {
+        Section {
+            NavigationLink {
+                OwnAircraftView(model: model)
+            } label: {
+                HStack {
+                    Label("My aircraft", systemImage: "airplane.circle")
+                    Spacer()
+                    Text(ownAircraftSummary)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } footer: {
+            Text("If your aircraft has ADS-B Out, your receiver hears your own "
+                 + "transmission and shows it as traffic sitting on top of you. "
+                 + "List the airframe here and it is recognised as yours.")
+        }
+    }
+
+    private var ownAircraftSummary: String {
+        let list = model.config.ownAircraft
+        switch list.count {
+        case 0:  return "None"
+        case 1:  return list[0].label
+        default: return "\(list.count)"
         }
     }
 

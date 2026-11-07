@@ -84,6 +84,7 @@ enum AppInfo {
         "An arrow points towards the aircraft; its tail grows towards the centre as the aircraft gets closer.",
         "A pulsing ring means an aircraft at that distance whose direction is not known — look all round.",
         "CBDR means constant bearing, decreasing range: the aircraft is on a collision course and will not appear to move in your windscreen.",
+        "If your aircraft has ADS-B Out, your receiver hears it and shows you as traffic on top of yourself. List the airframe under Settings › My aircraft and it is recognised as yours.",
     ]
 
     // MARK: - iPad windowing

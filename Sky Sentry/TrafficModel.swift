@@ -29,6 +29,10 @@ final class TrafficModel {
     private(set) var lastPacket: Date?
     /// Targets held but not drawn, e.g. filtered out on altitude.
     private(set) var filteredCount: Int = 0
+    /// True while one of the pilot's own airframes is being recognised as an
+    /// echo and dropped. Surfaced on the main screen: suppression the pilot
+    /// cannot see is suppression they cannot question.
+    private(set) var isSuppressingOwnEcho = false
     /// What happened to every target on the last pass, for the diagnostic log.
     private(set) var lastDispositions: [TargetDisposition] = []
     /// Republished each refresh so the diagnostics screen updates live.
@@ -235,6 +239,17 @@ final class TrafficModel {
     /// not supplied one. Course is only meaningful when actually moving, so a
     /// stationary fix gives track 0 and the display is effectively north-up
     /// until the aircraft starts rolling.
+    /// Whether a target is at our level, within the tolerance allowed for an
+    /// echo of ourselves. Unknown altitude on either side counts as agreement:
+    /// range alone already places it in the cockpit, and an own-ship echo that
+    /// drops its altitude field should still be recognised.
+    private func isCoAltitude(target: TrafficTarget, ownship: Ownship) -> Bool {
+        guard let theirs = target.altitudeFeet, let ours = ownship.pressureAltitudeFeet else {
+            return true
+        }
+        return abs(theirs - ours) <= config.ownEchoAltitudeFeet
+    }
+
     private func fallbackOwnship() -> Ownship? {
         guard location.hasUsableFix, let fix = location.latest else { return nil }
         return Ownship(latitude: fix.coordinate.latitude,
@@ -263,11 +278,13 @@ final class TrafficModel {
             solutions = []
             overallThreat = .clear
             filteredCount = 0
+            isSuppressingOwnEcho = false
             return
         }
 
         var resolved: [TrafficSolution] = []
         var filtered = 0
+        var ownEchoSuppressed = false
         var dispositions: [TargetDisposition] = []
 
         for target in targets.values {
@@ -294,6 +311,18 @@ final class TrafficModel {
                 range = rangeOnly
             } else {
                 dispositions.append(TargetDisposition(target: target, rangeNM: nil, outcome: .noPosition))
+                continue
+            }
+
+            // Our own ADS-B Out, heard by our own receiver. Dropped only while
+            // it is genuinely on top of us: the same airframe seen from another
+            // cockpit is ordinary traffic and must still be drawn.
+            if config.isOwnAircraft(address: target.icaoAddress),
+               range <= config.ownEchoRangeNM,
+               isCoAltitude(target: target, ownship: ownship) {
+                ownEchoSuppressed = true
+                dispositions.append(TargetDisposition(target: target, rangeNM: range,
+                                                      outcome: .ownAircraft))
                 continue
             }
 
@@ -376,6 +405,7 @@ final class TrafficModel {
         solutions = Array(resolved.prefix(config.maxDisplayedTargets))
         overallThreat = solutions.map(\.threat).max() ?? .clear
         filteredCount = filtered
+        isSuppressingOwnEcho = ownEchoSuppressed
         lastDispositions = dispositions
 
         recorder.record(ownship: ownship, dispositions: dispositions, at: now)
@@ -402,6 +432,7 @@ struct TargetDisposition {
         case noPosition
         case cappedByLimit
         case notAircraft
+        case ownAircraft
 
         /// Detailed, per-target, for the log line.
         var label: String {
@@ -412,6 +443,7 @@ struct TargetDisposition {
             case .noPosition:             return "no-position"
             case .cappedByLimit:          return "capped-by-limit"
             case .notAircraft:            return "not-aircraft"
+            case .ownAircraft:            return "own-aircraft"
             }
         }
 
@@ -426,6 +458,7 @@ struct TargetDisposition {
             case .noPosition:     return "no-position"
             case .cappedByLimit:  return "capped-by-limit"
             case .notAircraft:    return "not-aircraft"
+            case .ownAircraft:    return "own-aircraft"
             }
         }
     }

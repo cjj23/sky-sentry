@@ -76,6 +76,33 @@ struct AlertConfig {
     /// How much bearing history to keep per target.
     var cbdrWindow: TimeInterval = 12
 
+    // MARK: Own aircraft
+    //
+    // An aircraft fitted with ADS-B Out is heard by a receiver in its own
+    // cockpit, exactly as any other aircraft would be. The echo sits on top of
+    // ownship, matches every turn and never goes away, which reads as a
+    // permanent collision threat and makes the display useless.
+
+    /// Airframes the pilot flies, whose own transmissions are not traffic.
+    var ownAircraft: [OwnAircraft] = []
+
+    /// How close a listed airframe must be before its report is taken as our
+    /// own echo rather than that aircraft genuinely flying nearby.
+    ///
+    /// The proximity gate is the safety-critical part. Suppressing a listed
+    /// address wherever it appeared would silently hide a real aircraft from a
+    /// pilot flying a different one that day — and a formation or circuit
+    /// partner from the same fleet is precisely the aircraft that would be
+    /// hidden, at precisely the moment it matters. An echo of ourselves is
+    /// always within yards, so the gate can be tight enough to make that
+    /// mistake impossible.
+    var ownEchoRangeNM: Double = 0.5
+    var ownEchoAltitudeFeet: Int = 500
+
+    func isOwnAircraft(address: UInt32) -> Bool {
+        ownAircraft.contains { $0.address == address }
+    }
+
     static let `default` = AlertConfig()
 
     // MARK: Persistence
@@ -88,6 +115,7 @@ struct AlertConfig {
         static let band = "altitudeBand"
         static let profile = "alertProfile"
         static let bias = "forwardBias"
+        static let ownAircraft = "ownAircraft"
     }
 
     static func loaded() -> AlertConfig {
@@ -102,6 +130,10 @@ struct AlertConfig {
            let kind = AlertProfile.Kind(rawValue: raw) { config.profileKind = kind }
         if let raw = defaults.string(forKey: Key.bias),
            let bias = ForwardBias(rawValue: raw) { config.forwardBias = bias }
+        if let data = defaults.data(forKey: Key.ownAircraft),
+           let list = try? JSONDecoder().decode([OwnAircraft].self, from: data) {
+            config.ownAircraft = list
+        }
         return config
     }
 
@@ -111,6 +143,41 @@ struct AlertConfig {
         defaults.set(altitudeBand.rawValue, forKey: Key.band)
         defaults.set(profileKind.rawValue, forKey: Key.profile)
         defaults.set(forwardBias.rawValue, forKey: Key.bias)
+        if let data = try? JSONEncoder().encode(ownAircraft) {
+            defaults.set(data, forKey: Key.ownAircraft)
+        }
+    }
+}
+
+// MARK: - Own aircraft
+
+/// An airframe the pilot flies, identified by the 24-bit ICAO address its
+/// transponder transmits.
+///
+/// The address is the right key rather than the callsign: it is unique to the
+/// airframe, it is what the datalink actually carries, and it does not change
+/// with the flight number or the squawk.
+struct OwnAircraft: Identifiable, Equatable, Codable, Sendable {
+    let address: UInt32
+    /// What to call it in settings — the registration, usually.
+    var label: String
+
+    var id: UInt32 { address }
+
+    var addressHex: String { String(format: "%06X", address) }
+
+    /// Accepts the hex form a pilot would read off a transponder page or a
+    /// registration lookup: six hex digits, with or without an 0x prefix,
+    /// spaces or separators.
+    static func parse(address text: String) -> UInt32? {
+        let cleaned = text
+            .uppercased()
+            .replacingOccurrences(of: "0X", with: "")
+            .filter(\.isHexDigit)
+        guard cleaned.count == 6, let value = UInt32(cleaned, radix: 16), value != 0 else {
+            return nil
+        }
+        return value
     }
 }
 

@@ -298,6 +298,9 @@ struct ContentView: View {
         if model.isStale { return "NO DATA" }
         var parts = ["\(model.solutions.count) IN RANGE"]
         if model.filteredCount > 0 { parts.append("\(model.filteredCount) FILTERED") }
+        // Say so when we are hiding something. A pilot who has forgotten which
+        // airframe is listed should be able to see that suppression is active.
+        if model.isSuppressingOwnEcho { parts.append("SELF HIDDEN") }
         return parts.joined(separator: " · ")
     }
 

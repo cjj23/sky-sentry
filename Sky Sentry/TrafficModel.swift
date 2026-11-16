@@ -33,6 +33,12 @@ final class TrafficModel {
     /// echo and dropped. Surfaced on the main screen: suppression the pilot
     /// cannot see is suppression they cannot question.
     private(set) var isSuppressingOwnEcho = false
+    /// An unlisted aircraft that has sat on top of us long enough to be worth
+    /// asking about. The app never acts on this by itself: hiding an aircraft
+    /// is the pilot's decision, and a wrong guess hides a real one.
+    private(set) var ownAircraftSuggestion: TrafficTarget?
+    /// When each co-located candidate was first seen in that position.
+    private var coLocatedSince: [UInt32: Date] = [:]
     /// What happened to every target on the last pass, for the diagnostic log.
     private(set) var lastDispositions: [TargetDisposition] = []
     /// Republished each refresh so the diagnostics screen updates live.
@@ -239,15 +245,34 @@ final class TrafficModel {
     /// not supplied one. Course is only meaningful when actually moving, so a
     /// stationary fix gives track 0 and the display is effectively north-up
     /// until the aircraft starts rolling.
-    /// Whether a target is at our level, within the tolerance allowed for an
-    /// echo of ourselves. Unknown altitude on either side counts as agreement:
-    /// range alone already places it in the cockpit, and an own-ship echo that
-    /// drops its altitude field should still be recognised.
-    private func isCoAltitude(target: TrafficTarget, ownship: Ownship) -> Bool {
+    /// Whether a target is at our level, within a given tolerance. Unknown
+    /// altitude on either side counts as agreement: range alone already places
+    /// it in the cockpit, and an own-ship echo that drops its altitude field
+    /// should still be recognised.
+    private func isCoAltitude(target: TrafficTarget, ownship: Ownship,
+                              withinFeet tolerance: Int) -> Bool {
         guard let theirs = target.altitudeFeet, let ours = ownship.pressureAltitudeFeet else {
             return true
         }
-        return abs(theirs - ours) <= config.ownEchoAltitudeFeet
+        return abs(theirs - ours) <= tolerance
+    }
+
+    /// Accepts the standing suggestion: this airframe is ours.
+    func acceptOwnAircraftSuggestion() {
+        guard let target = ownAircraftSuggestion else { return }
+        config.ownAircraft.append(OwnAircraft(address: target.icaoAddress,
+                                              label: target.shortLabel))
+        ownAircraftSuggestion = nil
+        coLocatedSince[target.icaoAddress] = nil
+    }
+
+    /// Declines it, and does not ask again. Formating with the same aircraft
+    /// all sortie should not mean being asked all sortie.
+    func declineOwnAircraftSuggestion() {
+        guard let target = ownAircraftSuggestion else { return }
+        config.dismissedOwnAircraft.append(target.icaoAddress)
+        ownAircraftSuggestion = nil
+        coLocatedSince[target.icaoAddress] = nil
     }
 
     private func fallbackOwnship() -> Ownship? {
@@ -279,6 +304,8 @@ final class TrafficModel {
             overallThreat = .clear
             filteredCount = 0
             isSuppressingOwnEcho = false
+            ownAircraftSuggestion = nil
+            coLocatedSince.removeAll()
             return
         }
 
@@ -286,6 +313,8 @@ final class TrafficModel {
         var filtered = 0
         var ownEchoSuppressed = false
         var dispositions: [TargetDisposition] = []
+        var stillCoLocated: Set<UInt32> = []
+        var suggestion: TrafficTarget?
 
         for target in targets.values {
             // Ground vehicles and obstacles share the datalink but are not
@@ -319,11 +348,28 @@ final class TrafficModel {
             // cockpit is ordinary traffic and must still be drawn.
             if config.isOwnAircraft(address: target.icaoAddress),
                range <= config.ownEchoRangeNM,
-               isCoAltitude(target: target, ownship: ownship) {
+               isCoAltitude(target: target, ownship: ownship,
+                            withinFeet: config.ownEchoAltitudeFeet) {
                 ownEchoSuppressed = true
                 dispositions.append(TargetDisposition(target: target, rangeNM: range,
                                                       outcome: .ownAircraft))
                 continue
+            }
+
+            // Not listed, but behaving exactly as our own transmission would.
+            // Only noted here; whether it has held that position long enough to
+            // be worth asking about is decided once the pass is complete.
+            if !config.isOwnAircraft(address: target.icaoAddress),
+               !config.hasDismissedSuggestion(for: target.icaoAddress),
+               range <= config.ownEchoSuggestRangeNM,
+               isCoAltitude(target: target, ownship: ownship,
+                            withinFeet: config.ownEchoSuggestAltitudeFeet) {
+                stillCoLocated.insert(target.icaoAddress)
+                coLocatedSince[target.icaoAddress, default: now] = coLocatedSince[target.icaoAddress] ?? now
+                if now.timeIntervalSince(coLocatedSince[target.icaoAddress] ?? now)
+                    >= config.ownEchoSuggestAfter {
+                    suggestion = target
+                }
             }
 
             guard range <= config.plotRangeNM else {
@@ -406,6 +452,10 @@ final class TrafficModel {
         overallThreat = solutions.map(\.threat).max() ?? .clear
         filteredCount = filtered
         isSuppressingOwnEcho = ownEchoSuppressed
+        // Anything that has moved away, or gone, starts its clock again if it
+        // comes back: only an unbroken stay counts towards the question.
+        coLocatedSince = coLocatedSince.filter { stillCoLocated.contains($0.key) }
+        ownAircraftSuggestion = suggestion
         lastDispositions = dispositions
 
         recorder.record(ownship: ownship, dispositions: dispositions, at: now)

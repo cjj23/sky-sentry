@@ -62,6 +62,10 @@ struct ContentView: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
 
+                    if let suggestion = model.ownAircraftSuggestion, !compact {
+                        ownAircraftPrompt(suggestion, palette: palette)
+                    }
+
                     if !compact { footer(palette) }
                 }
             }
@@ -86,6 +90,55 @@ struct ContentView: View {
         .sheet(isPresented: $showingSettings) {
             SettingsView(model: model, subscriptions: subscriptions)
         }
+    }
+
+    // MARK: - Own aircraft prompt
+
+    /// Offered inline rather than as an alert. A modal over the traffic display
+    /// would cover the one thing the pilot is looking at, and it would arrive
+    /// unannounced in the middle of a sortie. This sits below the picture and
+    /// waits; ignoring it costs nothing.
+    private func ownAircraftPrompt(_ target: TrafficTarget, palette: Palette) -> some View {
+        VStack(spacing: 8) {
+            Text("\(target.shortLabel) has stayed on top of you for a minute.")
+                .font(.annunciatorDetail(13, weight: .semibold))
+                .multilineTextAlignment(.center)
+            Text("Is this your own aircraft's ADS-B Out?")
+                .font(.annunciatorDetail(12))
+                .opacity(0.85)
+
+            HStack(spacing: 10) {
+                Button {
+                    model.declineOwnAircraftSuggestion()
+                } label: {
+                    Text("No, it's traffic")
+                        .font(.annunciatorDetail(12, weight: .semibold))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(Capsule().stroke(palette.ink.opacity(0.5), lineWidth: 1.5))
+                }
+
+                Button {
+                    model.acceptOwnAircraftSuggestion()
+                } label: {
+                    Text("Yes, that's me")
+                        .font(.annunciatorDetail(12, weight: .bold))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(Capsule().fill(palette.ink.opacity(0.22)))
+                }
+            }
+        }
+        .foregroundStyle(palette.ink)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(palette.ink.opacity(0.10))
+        )
+        .padding(.horizontal, 16)
+        .padding(.bottom, 6)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
     // MARK: - Getting started

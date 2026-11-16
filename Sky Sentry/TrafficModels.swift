@@ -99,8 +99,27 @@ struct AlertConfig {
     var ownEchoRangeNM: Double = 0.5
     var ownEchoAltitudeFeet: Int = 500
 
+    /// Thresholds for *offering* to treat an aircraft as ownship, which are
+    /// deliberately tighter than the thresholds for acting on it. Suggesting
+    /// is cheap and reversible; suppressing is not, so the suggestion has to
+    /// clear a higher bar before the pilot is asked at all.
+    var ownEchoSuggestRangeNM: Double = 0.15
+    var ownEchoSuggestAltitudeFeet: Int = 300
+    /// How long it has to hold that position before we ask. Long enough that
+    /// a genuine close pass has come and gone, since a real aircraft this
+    /// close is either formating or leaving.
+    var ownEchoSuggestAfter: TimeInterval = 60
+
+    /// Addresses the pilot has answered "not mine" for. Kept so the question
+    /// is asked once and not once a minute for a whole formation sortie.
+    var dismissedOwnAircraft: [UInt32] = []
+
     func isOwnAircraft(address: UInt32) -> Bool {
         ownAircraft.contains { $0.address == address }
+    }
+
+    func hasDismissedSuggestion(for address: UInt32) -> Bool {
+        dismissedOwnAircraft.contains(address)
     }
 
     static let `default` = AlertConfig()
@@ -116,6 +135,7 @@ struct AlertConfig {
         static let profile = "alertProfile"
         static let bias = "forwardBias"
         static let ownAircraft = "ownAircraft"
+        static let dismissedOwnAircraft = "dismissedOwnAircraft"
     }
 
     static func loaded() -> AlertConfig {
@@ -134,6 +154,9 @@ struct AlertConfig {
            let list = try? JSONDecoder().decode([OwnAircraft].self, from: data) {
             config.ownAircraft = list
         }
+        if let stored = defaults.array(forKey: Key.dismissedOwnAircraft) as? [NSNumber] {
+            config.dismissedOwnAircraft = stored.map { $0.uint32Value }
+        }
         return config
     }
 
@@ -146,6 +169,8 @@ struct AlertConfig {
         if let data = try? JSONEncoder().encode(ownAircraft) {
             defaults.set(data, forKey: Key.ownAircraft)
         }
+        defaults.set(dismissedOwnAircraft.map { NSNumber(value: $0) },
+                     forKey: Key.dismissedOwnAircraft)
     }
 }
 

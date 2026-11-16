@@ -133,7 +133,9 @@ struct OwnAircraftView: View {
 
     private var manualSection: some View {
         Section {
-            TextField("ICAO address, e.g. 40738A", text: $manualAddress)
+            // Describes the format rather than naming an address: a worked
+            // example here is somebody's real airframe.
+            TextField("Six hex digits", text: $manualAddress)
                 .font(.body.monospaced())
                 .textInputAutocapitalization(.characters)
                 .autocorrectionDisabled()

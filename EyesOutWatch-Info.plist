@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Permits WKExtendedRuntimeSession, which keeps the app running with the
+	     wrist down so haptic traffic alerts continue when the screen sleeps.
+	     "self-care" gives a 10 minute session. "mindfulness" would give an hour
+	     but is a weaker description of what this app does; see the notes in
+	     MonitoringSession.swift before changing it. -->
+	<key>WKBackgroundModes</key>
+	<array>
+		<string>self-care</string>
+	</array>
+</dict>
+</plist>
